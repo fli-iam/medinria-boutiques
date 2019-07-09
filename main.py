@@ -1,6 +1,8 @@
 import sys
 import random
+from os import path
 import subprocess
+from subprocess import Popen
 from PySide2 import QtGui, QtCore, QtWidgets
 from PySide2.QtCore import Qt, QAbstractTableModel, QAbstractItemModel, QModelIndex
 from PySide2.QtGui import QColor
@@ -13,7 +15,7 @@ from PySide2.QtGui import QColor
 # 	def load_data(self, data):
 # 		self.results = data
 # 		self.column_count = 4
-# 		self.row_count = len(self.results) if self.results else 0
+# 		self.row_count = len(self.results) if self.results is not None else 0
 # 		return
 
 # 	def rowCount(self, parent=QModelIndex()):
@@ -87,7 +89,7 @@ from PySide2.QtGui import QColor
 # 		# Set the layout to the QWidget
 # 		self.setLayout(self.main_layout)
 
-class SearchTools(QtWidgets.QWidget):
+class SearchToolsWidget(QtWidgets.QWidget):
 	def __init__(self):
 		super().__init__()
 
@@ -142,6 +144,7 @@ class SearchTools(QtWidgets.QWidget):
 		descriptionIndex = line.find("DESCRIPTION")
 		downloadsIndex = line.find("DOWNLOADS")
 		self.table.setRowCount(len(lines)-2)
+		self.searchResults = []
 
 		n = 0
 		for line in lines[2:]:
@@ -155,54 +158,163 @@ class SearchTools(QtWidgets.QWidget):
 			self.table.setItem(n, 2, QtWidgets.QTableWidgetItem(description))
 			self.table.setItem(n, 3, QtWidgets.QTableWidgetItem(downloads))
 
+			self.searchResults.append({"id": id, "title": title, "description": description, "downloads": downloads})
+
 			n += 1
 
 		# self.searchResultsWidget.model.load_data(data)
 		# self.searchResultsWidget.model.emitDataChanged()
 
+	def getSelectedTools(self):
+		currentRow = self.table.currentRow()
+		return self.searchResults[currentRow] if currentRow >= 0 and currentRow < len(self.searchResults) else None
+
 class InvocationWidget(QtWidgets.QWidget):
-	def __init__(self):
+	def __init__(self, searchToolsWidget):
 		super().__init__()
 
+		self.searchToolsWidget = searchToolsWidget
 		self.layout = QtWidgets.QVBoxLayout()
 
-		self.generateSimpleInvocationButton = QtWidgets.QPushButton("Generate simple invocation")
-		self.generateFullInvocationButton = QtWidgets.QPushButton("Generate full invocation")
+		self.generateInvocationButton = QtWidgets.QPushButton("Generate invocation file")
+		self.fullInvocationCheckbox = QtWidgets.QCheckBox("Full invocation")
 		self.openInvocationButton = QtWidgets.QPushButton("Open invocation file")
-		# self.invocationEditor = QtGui.QTextEdit()
+
+		self.invocationEditor = QtWidgets.QTextEdit()
 		self.saveInvocationButton = QtWidgets.QPushButton("Save invocation file")
 
-		self.layout.addWidget(self.generateSimpleInvocationButton)
-		self.layout.addWidget(self.generateFullInvocationButton)
+		self.layout.addWidget(self.generateInvocationButton)
+		self.layout.addWidget(self.fullInvocationCheckbox)
 		self.layout.addWidget(self.openInvocationButton)
-		# self.layout.addWidget(self.invocationEditor)
+		self.layout.addWidget(self.invocationEditor)
 		self.layout.addWidget(self.saveInvocationButton)
 
+		self.generateInvocationButton.clicked.connect(self.generateInvocationFile)
+		self.openInvocationButton.clicked.connect(self.openInvocationFile)
+		self.saveInvocationButton.clicked.connect(self.saveInvocationFile)
+		
 		self.setLayout(self.layout)
-		return
 
-	def file_open(self):
-		name = QtGui.QFileDialog.getOpenFileName(self, 'Open Invocation File')
-		file = open(name,'r')
+	def generateInvocationFile(self):
+		tool = self.searchToolsWidget.getSelectedTools()
+		if tool is None:
+			return
+		args = ["bosh", "example"]
+		if self.fullInvocationCheckbox.isChecked():
+			args.append("--complete")
+		args.append(tool["id"])
+		result = subprocess.run(args, capture_output=True)
+		output = result.stdout.decode("utf-8")
+		self.invocationEditor.setText(output)
+
+	def openInvocationFile(self):
+		name = QtWidgets.QFileDialog.getOpenFileName(self, 'Open Invocation File')
+		
+		file = open(name[0],'r')
 
 		with file:
 			text = file.read()
 			self.invocationEditor.setText(text)
+
+	def saveInvocationFile(self):
+		name = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Invocation File')
+		
+		file = open(name[0],'w')
+
+		with file:
+			file.write(self.invocationEditor.toPlainText())
+
+class ExecutionWidget(QtWidgets.QWidget):
+	def __init__(self, searchToolsWidget, invocationWidget):
+		super().__init__()
+		self.searchToolsWidget = searchToolsWidget
+		self.invocationWidget = invocationWidget
+		self.layout = QtWidgets.QVBoxLayout()
+
+		self.executeButton = QtWidgets.QPushButton("Execute tool")
+
+		self.output = QtWidgets.QTextEdit()
+		self.output.setReadOnly(True)
+
+		self.layout.addWidget(self.executeButton)
+		self.layout.addWidget(self.output)
+
+		self.executeButton.clicked.connect(self.executeTool)
+		
+		# QProcess object for external app
+		self.process = QtCore.QProcess(self)
+		# QProcess emits `readyRead` when there is data to be read
+		self.process.readyRead.connect(self.dataReady)
+
+		# Just to prevent accidentally running multiple times
+		# Disable the button when process starts, and enable it when it finishes
+		self.process.started.connect(lambda: self.runButton.setEnabled(False))
+		self.process.finished.connect(lambda: self.runButton.setEnabled(True))
+
+		self.setLayout(self.layout)
+
+	def executeTool(self):
+		tool = self.searchToolsWidget.getSelectedTools()
+		if tool is None:
+			return
+
+		temporaryInvocationFilePath = path.join(QtCore.QDir.tempPath(), "invocation.json")
+
+		invocationFile = open(temporaryInvocationFilePath,'w')
+
+		with invocationFile:
+			invocationFile.write(self.invocationWidget.invocationEditor.toPlainText())
+
+		args = ["exec", "launch", "-s", tool["id"], temporaryInvocationFilePath]
+
+		self.process.start('bosh', args)
+
+		# temporaryOutputFilePath = path.join(QtCore.QDir.tempPath(), "output.txt")
+		# temporaryErrorFilePath = path.join(QtCore.QDir.tempPath(), "error.txt")
+
+		# outputFile = open(temporaryOutputFilePath,'rw')
+		# errorFile = open(temporaryErrorFilePath,'rw')
+
+		# with outputFile:
+		# 	with errorFile:
+		# 		process = Popen(args, stdout=outputFile, stderr=errorFile)
+		# 		returnCode = False
+		# 		while not returnCode:
+		# 			returnCode = process.poll()
+		# 			self.output.setText(outputFile.read())
+		# 			time.sleep(.25)
+
+		# 		self.output.setText(outputFile.read() + "\n\n Execution finished.")
+
+
+	def print(self, text):
+		cursor = self.output.textCursor()
+		cursor.movePosition(cursor.End)
+		cursor.insertText(text)
+		self.output.ensureCursorVisible()
+
+	def processStarted(self):
+		self.print("Process started...")
+
+	def processFinished(self):
+		self.print("Process finished.")
+
+	def dataReady(self):
+		self.print(str(self.process.readAll()))
 
 
 class MyWidget(QtWidgets.QWidget):
 	def __init__(self):
 		super().__init__()
 
-		self.searchTools = SearchTools()
-		self.invocationWidget = InvocationWidget()
+		self.searchToolsWidget = SearchToolsWidget()
+		self.invocationWidget = InvocationWidget(self.searchToolsWidget)
+		self.executionWidget = ExecutionWidget(self.searchToolsWidget, self.invocationWidget)
 
 		self.layout = QtWidgets.QVBoxLayout()
-		self.layout.addWidget(self.searchTools)
+		self.layout.addWidget(self.searchToolsWidget)
 		self.layout.addWidget(self.invocationWidget)
-
-		self.executeButton = QtWidgets.QPushButton("Execute")
-		self.layout.addWidget(self.executeButton)
+		self.layout.addWidget(self.executionWidget)
 
 		self.setLayout(self.layout)
 
