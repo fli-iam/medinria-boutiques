@@ -1,100 +1,21 @@
 import sys
 import random
+import re
 from os import path
 import subprocess
 from subprocess import Popen
 from PySide2 import QtGui, QtCore, QtWidgets
 from PySide2.QtCore import Qt, QAbstractTableModel, QAbstractItemModel, QModelIndex
 from PySide2.QtGui import QColor
-
-# class SearchResultsTableModel(QAbstractTableModel):
-# 	def __init__(self, data=None):
-# 		QAbstractTableModel.__init__(self)
-# 		self.load_data(data)
-
-# 	def load_data(self, data):
-# 		self.results = data
-# 		self.column_count = 4
-# 		self.row_count = len(self.results) if self.results is not None else 0
-# 		return
-
-# 	def rowCount(self, parent=QModelIndex()):
-# 		return self.row_count
-
-# 	def columnCount(self, parent=QModelIndex()):
-# 		return self.column_count
-
-# 	def headerData(self, section, orientation, role):
-# 		if role != Qt.DisplayRole:
-# 			return None
-# 		if orientation == Qt.Horizontal:
-# 			return ("ID", "Title", "Description", "Downloads")[section]
-# 		else:
-# 			return "{}".format(section)
-
-# 	def emitDataChanged(self):
-# 		self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(len(self.results), 3) , [Qt.DisplayRole])
-# 		return
-
-# 	def data(self, index, role=Qt.DisplayRole):
-# 		column = index.column()
-# 		row = index.row()
-# 		print(self.results[row][column])
-# 		if role == Qt.DisplayRole:
-# 			return self.results[row][column]
-# 		elif role == Qt.BackgroundRole:
-# 			return QColor(Qt.white)
-# 		elif role == Qt.TextAlignmentRole:
-# 			return Qt.AlignRight
-
-# 		return None
-
-# 	def flags(self, index):
-# 		return QtCore.Qt.ItemIsEnabled
-
-# 	def insertRows(row, count):
-# 		if count < 1 or row < 0 or row > len(self.results)
-# 			return False
-# 		self.beginInsertRows(self.createIndex(0, 0), row, row + count - 1)
-# 		self.endInsertRows()
-# 		return True
-
-# class SearchResultsWidget(QtWidgets.QWidget):
-# 	def __init__(self, data=None):
-# 		QtWidgets.QWidget.__init__(self)
-
-# 		# Getting the Model
-# 		self.model = SearchResultsTableModel(data)
-
-# 		# Creating a QTableView
-# 		self.table_view = QtWidgets.QTableView()
-# 		self.table_view.setModel(self.model)
-
-# 		# QTableView Headers
-# 		self.horizontal_header = self.table_view.horizontalHeader()
-# 		self.vertical_header = self.table_view.verticalHeader()
-# 		self.horizontal_header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
-# 		self.vertical_header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
-# 		self.horizontal_header.setStretchLastSection(True)
-
-# 		# QWidget Layout
-# 		self.main_layout = QtWidgets.QHBoxLayout()
-# 		size = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
-
-# 		## Left layout
-# 		size.setHorizontalStretch(1)
-# 		self.table_view.setSizePolicy(size)
-# 		self.main_layout.addWidget(self.table_view)
-
-# 		# Set the layout to the QWidget
-# 		self.setLayout(self.main_layout)
+from PySide2.QtCore import QObject, Signal, Slot
 
 class SearchToolsWidget(QtWidgets.QWidget):
+
+	toolSelected = Signal()
+	toolDeselected = Signal()
+
 	def __init__(self):
 		super().__init__()
-
-		self.text = QtWidgets.QLabel("Search tool")
-		self.text.setAlignment(QtCore.Qt.AlignCenter)
 
 		self.searchLineEdit = QtWidgets.QLineEdit()
 		self.searchLineEdit.setPlaceholderText("Search a tool in Boutiques...")
@@ -107,16 +28,28 @@ class SearchToolsWidget(QtWidgets.QWidget):
 		self.searchLayout.addWidget(self.button)
 		self.searchGroupBox.setLayout(self.searchLayout)
 		
-		# self.searchResultsWidget = SearchResultsWidget([['a', 'b', 'c', 'd'], ['a', 'b', 'c', 'd'], ['a', 'b', 'c', 'd'], ['a', 'b', 'c', 'd']])
+		self.loadingLabel = QtWidgets.QLabel("Loading...")
+		self.loadingLabel.hide()
 		self.createTable()
+
+		self.infoLabel = QtWidgets.QLabel("Tool Info")
+		self.infoLabel.hide()
+		self.info = QtWidgets.QTextEdit()
+		self.info.setReadOnly(True)
+		self.info.hide()
+
 		self.layout = QtWidgets.QVBoxLayout()
-		self.layout.addWidget(self.text)
 		self.layout.addWidget(self.searchGroupBox)
+		self.layout.addWidget(self.loadingLabel)
 		self.layout.addWidget(self.table)
+		self.layout.addWidget(self.infoLabel)
+		self.layout.addWidget(self.info)
 		self.setLayout(self.layout)
 
 		self.button.clicked.connect(self.searchBoutiquesTools)
 		self.searchLineEdit.returnPressed.connect(self.searchBoutiquesTools)
+
+		self.createProcess()
 
 	def createTable(self):
 		self.table = QtWidgets.QTableWidget()
@@ -127,14 +60,46 @@ class SearchToolsWidget(QtWidgets.QWidget):
 		self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
 		self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
 		self.table.setHorizontalHeaderLabels(["ID", "Title", "Description", "Downloads"])
-		return
+		self.table.itemSelectionChanged.connect(self.selectionChanged)
+		self.table.hide()
+
+	def createProcess(self):
+		self.process = QtCore.QProcess(self)
+		self.process.finished.connect(self.processFinished)
+
+	def selectionChanged(self):
+		print("selectionChanged")
+		tool = self.getSelectedTool()
+		print(tool)
+		if tool is None:
+			return
+		result = subprocess.run(["bosh", "pprint", tool["id"]], capture_output=True)
+		self.info.setText(result.stdout.decode("utf-8"))
+
+		self.infoLabel.show()
+		self.info.show()
+		self.toolSelected.emit()
 
 	def searchBoutiquesTools(self):
+		self.loadingLabel.show()
+		self.table.hide()
+		self.infoLabel.hide()
+		self.info.hide()
+
 		searchQuery = self.searchLineEdit.text()
-		result = subprocess.run(["bosh", "search", "-m 50", searchQuery], capture_output=True)
-		lines = result.stdout.decode("utf-8").splitlines()
-		print(lines)
-		
+		args = ["search", "-m 50", searchQuery]
+		self.process.start('bosh', args)
+		self.toolDeselected.emit()
+		self.searchResults = []
+
+	def processFinished(self):
+		self.loadingLabel.hide()
+		self.table.show()
+
+		output = self.process.readAll().data().decode(sys.stdout.encoding)
+		output = re.sub(r"\x1b\[[0-9;]*[mGKF]", "", output)
+		lines = output.splitlines()
+
 		if len(lines) < 2:
 			return
 
@@ -162,10 +127,7 @@ class SearchToolsWidget(QtWidgets.QWidget):
 
 			n += 1
 
-		# self.searchResultsWidget.model.load_data(data)
-		# self.searchResultsWidget.model.emitDataChanged()
-
-	def getSelectedTools(self):
+	def getSelectedTool(self):
 		currentRow = self.table.currentRow()
 		return self.searchResults[currentRow] if currentRow >= 0 and currentRow < len(self.searchResults) else None
 
@@ -178,13 +140,19 @@ class InvocationWidget(QtWidgets.QWidget):
 
 		self.generateInvocationButton = QtWidgets.QPushButton("Generate invocation file")
 		self.fullInvocationCheckbox = QtWidgets.QCheckBox("Full invocation")
+
+		self.invocationGroupBox = QtWidgets.QGroupBox()
+		self.invocationLayout = QtWidgets.QHBoxLayout()
+		self.invocationLayout.addWidget(self.generateInvocationButton)
+		self.invocationLayout.addWidget(self.fullInvocationCheckbox)
+		self.invocationGroupBox.setLayout(self.invocationLayout)
+
 		self.openInvocationButton = QtWidgets.QPushButton("Open invocation file")
 
 		self.invocationEditor = QtWidgets.QTextEdit()
 		self.saveInvocationButton = QtWidgets.QPushButton("Save invocation file")
 
-		self.layout.addWidget(self.generateInvocationButton)
-		self.layout.addWidget(self.fullInvocationCheckbox)
+		self.layout.addWidget(self.invocationGroupBox)
 		self.layout.addWidget(self.openInvocationButton)
 		self.layout.addWidget(self.invocationEditor)
 		self.layout.addWidget(self.saveInvocationButton)
@@ -196,7 +164,7 @@ class InvocationWidget(QtWidgets.QWidget):
 		self.setLayout(self.layout)
 
 	def generateInvocationFile(self):
-		tool = self.searchToolsWidget.getSelectedTools()
+		tool = self.searchToolsWidget.getSelectedTool()
 		if tool is None:
 			return
 		args = ["bosh", "example"]
@@ -224,6 +192,14 @@ class InvocationWidget(QtWidgets.QWidget):
 		with file:
 			file.write(self.invocationEditor.toPlainText())
 
+	@Slot()
+	def toolSelected(self):
+		self.show()
+
+	@Slot()
+	def toolDeselected(self):
+		self.hide()
+
 class ExecutionWidget(QtWidgets.QWidget):
 	def __init__(self, searchToolsWidget, invocationWidget):
 		super().__init__()
@@ -232,29 +208,29 @@ class ExecutionWidget(QtWidgets.QWidget):
 		self.layout = QtWidgets.QVBoxLayout()
 
 		self.executeButton = QtWidgets.QPushButton("Execute tool")
+		self.cancelButton = QtWidgets.QPushButton("Cancel execution")
+		self.cancelButton.hide()
 
 		self.output = QtWidgets.QTextEdit()
 		self.output.setReadOnly(True)
 
 		self.layout.addWidget(self.executeButton)
+		self.layout.addWidget(self.cancelButton)
 		self.layout.addWidget(self.output)
 
 		self.executeButton.clicked.connect(self.executeTool)
+		self.cancelButton.clicked.connect(self.cancelExecution)
 		
-		# QProcess object for external app
 		self.process = QtCore.QProcess(self)
-		# QProcess emits `readyRead` when there is data to be read
 		self.process.readyRead.connect(self.dataReady)
 
-		# Just to prevent accidentally running multiple times
-		# Disable the button when process starts, and enable it when it finishes
-		self.process.started.connect(lambda: self.runButton.setEnabled(False))
-		self.process.finished.connect(lambda: self.runButton.setEnabled(True))
+		self.process.started.connect(self.processStarted)
+		self.process.finished.connect(self.processFinished)
 
 		self.setLayout(self.layout)
 
 	def executeTool(self):
-		tool = self.searchToolsWidget.getSelectedTools()
+		tool = self.searchToolsWidget.getSelectedTool()
 		if tool is None:
 			return
 
@@ -269,23 +245,14 @@ class ExecutionWidget(QtWidgets.QWidget):
 
 		self.process.start('bosh', args)
 
-		# temporaryOutputFilePath = path.join(QtCore.QDir.tempPath(), "output.txt")
-		# temporaryErrorFilePath = path.join(QtCore.QDir.tempPath(), "error.txt")
+		args.insert(0, 'bosh')
+		self.output.clear()
+		self.print(" ".join(args) + "\n\n")
 
-		# outputFile = open(temporaryOutputFilePath,'rw')
-		# errorFile = open(temporaryErrorFilePath,'rw')
-
-		# with outputFile:
-		# 	with errorFile:
-		# 		process = Popen(args, stdout=outputFile, stderr=errorFile)
-		# 		returnCode = False
-		# 		while not returnCode:
-		# 			returnCode = process.poll()
-		# 			self.output.setText(outputFile.read())
-		# 			time.sleep(.25)
-
-		# 		self.output.setText(outputFile.read() + "\n\n Execution finished.")
-
+	def cancelExecution(self):
+		self.process.kill()
+		self.executeButton.show()
+		self.cancelButton.hide()
 
 	def print(self, text):
 		cursor = self.output.textCursor()
@@ -294,22 +261,43 @@ class ExecutionWidget(QtWidgets.QWidget):
 		self.output.ensureCursorVisible()
 
 	def processStarted(self):
-		self.print("Process started...")
+		self.print("Process started...\n\n")
+		self.executeButton.hide()
+		self.cancelButton.show()
 
 	def processFinished(self):
-		self.print("Process finished.")
+		self.print("\n\nProcess finished.")
+		self.executeButton.show()
+		self.cancelButton.hide()
 
 	def dataReady(self):
-		self.print(str(self.process.readAll()))
+		output = self.process.readAll().data().decode(sys.stdout.encoding)
+		output = re.sub(r"\x1b\[[0-9;]*[mGKF]", "", output)
+		self.print(output)
 
+	@Slot()
+	def toolSelected(self):
+		self.show()
 
-class MyWidget(QtWidgets.QWidget):
+	@Slot()
+	def toolDeselected(self):
+		self.hide()
+
+class BoutiquesGUI(QtWidgets.QWidget):
 	def __init__(self):
 		super().__init__()
 
 		self.searchToolsWidget = SearchToolsWidget()
 		self.invocationWidget = InvocationWidget(self.searchToolsWidget)
 		self.executionWidget = ExecutionWidget(self.searchToolsWidget, self.invocationWidget)
+		
+		self.invocationWidget.hide()
+		self.executionWidget.hide()
+
+		self.searchToolsWidget.toolSelected.connect(self.invocationWidget.toolSelected)
+		self.searchToolsWidget.toolSelected.connect(self.executionWidget.toolSelected)
+		self.searchToolsWidget.toolDeselected.connect(self.invocationWidget.toolDeselected)
+		self.searchToolsWidget.toolDeselected.connect(self.executionWidget.toolDeselected)
 
 		self.layout = QtWidgets.QVBoxLayout()
 		self.layout.addWidget(self.searchToolsWidget)
@@ -322,7 +310,7 @@ class MyWidget(QtWidgets.QWidget):
 if __name__ == "__main__":
 	app = QtWidgets.QApplication([])
 
-	widget = MyWidget()
+	widget = BoutiquesGUI()
 	widget.resize(800, 600)
 	widget.show()
 
