@@ -2,6 +2,8 @@
 
 A small Qt GUI to search and execute Boutiques apps.
 
+![Boutique Screenshot](boutiques-gui.png)
+
 ## Requirements
 
  - python3
