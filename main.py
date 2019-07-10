@@ -185,6 +185,13 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 		self.invocationJSON[id] = value
 		self.invocationChanged.emit()
 
+	def createGroupAndLayout(self, name):
+		group = QtWidgets.QGroupBox()
+		group.setTitle(name)
+		groupLayout = QtWidgets.QVBoxLayout()
+		group.setLayout(groupLayout)
+		return (group, groupLayout)
+
 	def parseDescriptor(self, invocationJSON):
 
 		self.invocationJSON = invocationJSON
@@ -217,9 +224,32 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 			except ValueError as e:
 				return
 
-			inputsGroup = QtWidgets.QGroupBox()
-			inputsGroup.setTitle("Inputs")
-			inputsLayout = QtWidgets.QVBoxLayout()
+			(mainInputsGroup, mainInputsLayout) = self.createGroupAndLayout("Main parameters")
+			(optionalInputsGroup, optionalInputsLayout) = self.createGroupAndLayout("Optional parameters")
+
+			idToGroupAndLayout = {}
+
+			idToOptional = {}
+
+			for inputObject in description["inputs"]:
+				if "id" in inputObject and "optional" in inputObject:
+					idToOptional[inputObject["id"]] = inputObject["optional"]
+
+			destinationLayouts = []
+
+			if "groups" in description:
+				for groupObject in description["groups"]:
+					if "members" in groupObject:
+						groupName = groupObject["name"]
+						groupAndLayout = self.createGroupAndLayout(groupName)
+						groupIsOptional = True
+						for member in groupObject["members"]:
+							idToGroupAndLayout[member] = groupAndLayout
+							if member in idToOptional and not idToOptional[member]:
+								groupIsOptional = False
+								break
+
+						destinationLayouts.append({"groupAndLayout": groupAndLayout, "layout": optionalInputsLayout if groupIsOptional else mainInputsLayout})
 
 			for inputObject in description["inputs"]:
 
@@ -240,11 +270,14 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 					if "list" in inputObject and inputObject["list"]:
 						subWidget = QtWidgets.QLineEdit()
 						subWidget.setPlaceholderText("Comma seperated " + ("strings" if inputObject["type"] == "String" else "numbers") + ".")
+						listString = json.dumps(self.invocationJSON[inputObject["id"]])
+						subWidget.setText(listString)
 						subWidget.textChanged.connect( (lambda inputObject, subWidget: lambda: self.listChanged(inputObject["id"], subWidget.text()) )(inputObject, subWidget) )
 					else:
 						if inputObject["type"] == "String":
 							subWidget = QtWidgets.QLineEdit()
 							subWidget.setPlaceholderText(inputObject["description"])
+							subWidget.setText(self.invocationJSON[inputObject["id"]])
 							subWidget.textChanged.connect( (lambda inputObject, subWidget: lambda: self.textChanged(inputObject["id"], subWidget.text()) )(inputObject, subWidget) )
 						else:
 							if "integer" in inputObject and inputObject["integer"]:
@@ -255,6 +288,7 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 								subWidget.setMinimum(inputObject["minimum"])
 							if "maximum" in inputObject:
 								subWidget.setMaximum(inputObject["maximum"])
+							subWidget.setValue(self.invocationJSON[inputObject["id"]])
 							subWidget.valueChanged.connect( (lambda inputObject, subWidget: lambda: self.valueChanged(inputObject["id"], subWidget.value()))(inputObject, subWidget) )
 
 					widget.setToolTip(inputObject["description"])
@@ -266,12 +300,21 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 				if inputObject["type"] == "Flag":
 					widget = QtWidgets.QCheckBox(inputObject["name"])
 					widget.setToolTip(inputObject["description"])
+					widget.setCheckState(Qt.Checked if self.invocationJSON[inputObject["id"]] else Qt.Unchecked)
 					widget.stateChanged.connect( (lambda inputObject, widget: lambda: self.stateChanged(inputObject["id"], widget.isChecked()) )(inputObject, widget) )
 
-				inputsLayout.addWidget(widget)
+				if inputObject["id"] in idToGroupAndLayout:
+					idToGroupAndLayout[inputObject["id"]][1].addWidget(widget)
+				elif "optional" in inputObject and inputObject["optional"]:
+					optionalInputsLayout.addWidget(widget)
+				else:
+					mainInputsLayout.addWidget(widget)
 
-			inputsGroup.setLayout(inputsLayout)
-			groupLayout.addWidget(inputsGroup)
+			for destinationLayout in destinationLayouts:
+				destinationLayout['layout'].addWidget(destinationLayout['groupAndLayout'][0])
+
+			groupLayout.addWidget(mainInputsGroup)
+			groupLayout.addWidget(optionalInputsGroup)
 		
 
 class InvocationWidget(QtWidgets.QWidget):
