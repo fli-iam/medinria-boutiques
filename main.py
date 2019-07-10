@@ -1,6 +1,8 @@
 import sys
 import random
+import os
 import re
+import json
 from os import path
 import subprocess
 from subprocess import Popen
@@ -131,6 +133,147 @@ class SearchToolsWidget(QtWidgets.QWidget):
 		currentRow = self.table.currentRow()
 		return self.searchResults[currentRow] if currentRow >= 0 and currentRow < len(self.searchResults) else None
 
+class InvocationGUIWidget(QtWidgets.QWidget):
+
+	invocationChanged = Signal()
+
+	def __init__(self, searchToolsWidget):
+		super().__init__()
+		self.searchToolsWidget = searchToolsWidget
+		self.layout = QtWidgets.QVBoxLayout()
+
+		self.rootWidget = QtWidgets.QWidget()
+		self.rootWidget.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Preferred)
+		self.rootWidget.setMinimumSize(800, 400)
+
+		self.scrollArea = QtWidgets.QScrollArea(self.rootWidget)
+		self.scrollArea.setVerticalScrollBarPolicy( Qt.ScrollBarAlwaysOn )
+		self.scrollArea.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Preferred)
+		self.scrollArea.setWidgetResizable( True )
+		self.scrollArea.setGeometry(0, 0, 800, 400 )
+		# self.scrollArea.setSizeConstraint()
+
+		self.layout.addWidget(self.rootWidget)
+
+		self.group = None
+		self.setLayout(self.layout)
+	
+	def makeLambda(arg1, ):
+		return lambda: x
+
+	def buttonClicked(self, id, name):
+		self.invocationJSON[id] = QtWidgets.QFileDialog.getOpenFileName(self, 'Select ' + name)[0]
+		self.invocationChanged.emit()
+	
+	def listChanged(self, id, value):
+		try:
+			self.invocationJSON[id] = json.loads("[" + value + "]")
+			self.invocationChanged.emit()
+		except ValueError as e:
+			return
+
+	def textChanged(self, id, value):
+		self.invocationJSON[id] = value
+		self.invocationChanged.emit()
+
+	def valueChanged(self, id, value):
+		self.invocationJSON[id] = value
+		self.invocationChanged.emit()
+
+	def stateChanged(self, id, value):
+		print('change: ' + id + ', value: ' + str(value))
+		self.invocationJSON[id] = value
+		self.invocationChanged.emit()
+
+	def parseDescriptor(self, invocationJSON):
+
+		self.invocationJSON = invocationJSON
+
+		if self.group is not None:
+			# self.layout.removeWidget(self.group)
+			self.scrollArea.takeWidget()
+			self.group.deleteLater()
+			self.group = None
+
+		self.group = QtWidgets.QWidget()
+		# self.group.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Maximum)
+		# self.group.setMinimumSize(800, 400)
+		self.scrollArea.setWidget(self.group)
+
+		groupLayout = QtWidgets.QVBoxLayout()
+		# groupLayout.setSizeConstraint(QtWidgets.QLayout.SetMaximumSize)
+		self.group.setLayout(groupLayout)
+		# self.layout.addWidget(self.group)
+
+		tool = self.searchToolsWidget.getSelectedTool()
+		
+		cacheDirectory = os.path.expanduser('~/.cache/boutiques/')
+		descriptorFileName = tool["id"].replace(".", "-") + ".json"
+		descriptorFile = open(path.join(cacheDirectory, descriptorFileName), 'r')
+
+		with descriptorFile:
+			try:
+				description = json.loads(descriptorFile.read())
+			except ValueError as e:
+				return
+
+			inputsGroup = QtWidgets.QGroupBox()
+			inputsGroup.setTitle("Inputs")
+			inputsLayout = QtWidgets.QVBoxLayout()
+
+			for inputObject in description["inputs"]:
+
+				widget = None
+				
+				if inputObject["type"] == "File":
+					widget = QtWidgets.QPushButton("Select " + inputObject["name"])
+					widget.clicked.connect( ( lambda inputObject: lambda: self.buttonClicked(inputObject["id"], inputObject["name"]) )(inputObject) )
+
+				if inputObject["type"] == "String" or inputObject["type"] == "Number":
+
+					widget = QtWidgets.QGroupBox()
+					layout = QtWidgets.QHBoxLayout()
+					label = QtWidgets.QLabel(inputObject["name"] + ":")
+					layout.addWidget(label)
+
+					subWidget = None
+					if "list" in inputObject and inputObject["list"]:
+						subWidget = QtWidgets.QLineEdit()
+						subWidget.setPlaceholderText("Comma seperated " + ("strings" if inputObject["type"] == "String" else "numbers") + ".")
+						subWidget.textChanged.connect( (lambda inputObject, subWidget: lambda: self.listChanged(inputObject["id"], subWidget.text()) )(inputObject, subWidget) )
+					else:
+						if inputObject["type"] == "String":
+							subWidget = QtWidgets.QLineEdit()
+							subWidget.setPlaceholderText(inputObject["description"])
+							subWidget.textChanged.connect( (lambda inputObject, subWidget: lambda: self.textChanged(inputObject["id"], subWidget.text()) )(inputObject, subWidget) )
+						else:
+							if "integer" in inputObject and inputObject["integer"]:
+								subWidget = QtWidgets.QSpinBox()
+							else:
+								subWidget = QtWidgets.QDoubleSpinBox()
+							if "minimum" in inputObject:
+								subWidget.setMinimum(inputObject["minimum"])
+							if "maximum" in inputObject:
+								subWidget.setMaximum(inputObject["maximum"])
+							subWidget.valueChanged.connect( (lambda inputObject, subWidget: lambda: self.valueChanged(inputObject["id"], subWidget.value()))(inputObject, subWidget) )
+
+					widget.setToolTip(inputObject["description"])
+
+					layout.addWidget(subWidget)
+
+					widget.setLayout(layout)
+					
+				if inputObject["type"] == "Flag":
+					widget = QtWidgets.QCheckBox(inputObject["name"])
+					widget.setToolTip(inputObject["description"])
+					widget.stateChanged.connect( (lambda inputObject, widget: lambda: self.stateChanged(inputObject["id"], widget.isChecked()) )(inputObject, widget) )
+
+				inputsLayout.addWidget(widget)
+
+			inputsGroup.setLayout(inputsLayout)
+			groupLayout.addWidget(inputsGroup)
+		
+
 class InvocationWidget(QtWidgets.QWidget):
 	def __init__(self, searchToolsWidget):
 		super().__init__()
@@ -138,28 +281,32 @@ class InvocationWidget(QtWidgets.QWidget):
 		self.searchToolsWidget = searchToolsWidget
 		self.layout = QtWidgets.QVBoxLayout()
 
-		self.generateInvocationButton = QtWidgets.QPushButton("Generate invocation file")
-		self.fullInvocationCheckbox = QtWidgets.QCheckBox("Full invocation")
+		# self.generateInvocationButton = QtWidgets.QPushButton("Generate invocation file")
+		# self.fullInvocationCheckbox = QtWidgets.QCheckBox("Full invocation")
 
-		self.invocationGroupBox = QtWidgets.QGroupBox()
-		self.invocationLayout = QtWidgets.QHBoxLayout()
-		self.invocationLayout.addWidget(self.generateInvocationButton)
-		self.invocationLayout.addWidget(self.fullInvocationCheckbox)
-		self.invocationGroupBox.setLayout(self.invocationLayout)
+		# self.invocationGroupBox = QtWidgets.QGroupBox()
+		# self.invocationLayout = QtWidgets.QHBoxLayout()
+		# self.invocationLayout.addWidget(self.generateInvocationButton)
+		# self.invocationLayout.addWidget(self.fullInvocationCheckbox)
+		# self.invocationGroupBox.setLayout(self.invocationLayout)
+
+		self.invocationGUIWidget = InvocationGUIWidget(searchToolsWidget)
 
 		self.openInvocationButton = QtWidgets.QPushButton("Open invocation file")
 
 		self.invocationEditor = QtWidgets.QTextEdit()
 		self.saveInvocationButton = QtWidgets.QPushButton("Save invocation file")
 
-		self.layout.addWidget(self.invocationGroupBox)
+		# self.layout.addWidget(self.invocationGroupBox)
 		self.layout.addWidget(self.openInvocationButton)
+		self.layout.addWidget(self.invocationGUIWidget)
 		self.layout.addWidget(self.invocationEditor)
 		self.layout.addWidget(self.saveInvocationButton)
 
-		self.generateInvocationButton.clicked.connect(self.generateInvocationFile)
+		# self.generateInvocationButton.clicked.connect(self.generateInvocationFile)
 		self.openInvocationButton.clicked.connect(self.openInvocationFile)
 		self.saveInvocationButton.clicked.connect(self.saveInvocationFile)
+		self.invocationGUIWidget.invocationChanged.connect(self.invocationChanged)
 		
 		self.setLayout(self.layout)
 
@@ -168,11 +315,16 @@ class InvocationWidget(QtWidgets.QWidget):
 		if tool is None:
 			return
 		args = ["bosh", "example"]
-		if self.fullInvocationCheckbox.isChecked():
-			args.append("--complete")
+		# if self.fullInvocationCheckbox.isChecked():
+		args.append("--complete")
 		args.append(tool["id"])
 		result = subprocess.run(args, capture_output=True)
 		output = result.stdout.decode("utf-8")
+		try:
+			self.invocationJSON = json.loads(output)
+		except ValueError as e:
+			self.invocationJSON = None
+			pass
 		self.invocationEditor.setText(output)
 
 	def openInvocationFile(self):
@@ -183,6 +335,10 @@ class InvocationWidget(QtWidgets.QWidget):
 		with file:
 			text = file.read()
 			self.invocationEditor.setText(text)
+
+	def invocationChanged(self):
+		output = json.dumps(self.invocationJSON, indent=4)
+		self.invocationEditor.setText(output)
 
 	def saveInvocationFile(self):
 		name = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Invocation File')
@@ -195,6 +351,8 @@ class InvocationWidget(QtWidgets.QWidget):
 	@Slot()
 	def toolSelected(self):
 		self.show()
+		self.generateInvocationFile()
+		self.invocationGUIWidget.parseDescriptor(self.invocationJSON)
 
 	@Slot()
 	def toolDeselected(self):
