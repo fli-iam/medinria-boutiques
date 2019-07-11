@@ -139,33 +139,39 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 
 	def __init__(self, searchToolsWidget):
 		super().__init__()
+		self.ignoreSignals = False
 		self.searchToolsWidget = searchToolsWidget
+
 		self.layout = QtWidgets.QVBoxLayout()
+		
+		self.setMinimumHeight(300)
+		# self.rootWidget.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Preferred)
+		# self.rootWidget.setHorizontalPolicy(QtWidgets.QSizePolicy.GrowFlag) # not working: no setHorizontalPolicy on a widget, only for layouts
 
-		self.rootWidget = QtWidgets.QWidget()
-		self.rootWidget.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Preferred)
-		self.rootWidget.setMinimumSize(800, 400)
-
-		self.scrollArea = QtWidgets.QScrollArea(self.rootWidget)
+		self.scrollArea = QtWidgets.QScrollArea(self)
 		self.scrollArea.setVerticalScrollBarPolicy( Qt.ScrollBarAlwaysOn )
-		self.scrollArea.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Preferred)
 		self.scrollArea.setWidgetResizable( True )
-		self.scrollArea.setGeometry(0, 0, 800, 400 )
-		# self.scrollArea.setSizeConstraint()
+		# self.scrollArea.setGeometry(0, 0, 800, 400 )
+		# self.scrollArea.setMinimumHeight(300)
+		self.scrollArea.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Preferred)
 
-		self.layout.addWidget(self.rootWidget)
-
+		self.layout.addWidget(self.scrollArea)
+		
 		self.group = None
 		self.setLayout(self.layout)
 	
 	def inputIsMutuallyExclusive(self, inputId):
-		return inputId in self.idToGroupObjectAndLayout and "mutually-exclusive" in self.idToGroupObjectAndLayout[inputId]["object"] and self.idToGroupObjectAndLayout[inputId]["object"]["mutually-exclusive"]
+		return inputId in self.idToGroupObject and "mutually-exclusive" in self.idToGroupObject[inputId]["object"] and self.idToGroupObject[inputId]["object"]["mutually-exclusive"]
 
 	def removeMutuallyExclusiveParameters(self, inputId):
 		if self.inputIsMutuallyExclusive(inputId):
-			if "members" in self.idToGroupObjectAndLayout[inputId]["object"]:
-				groupMembers = self.idToGroupObjectAndLayout[inputId]["object"]["members"]
+			if "members" in self.idToGroupObject[inputId]["object"]:
+				groupMembers = self.idToGroupObject[inputId]["object"]["members"]
 				for groupMember in groupMembers:
+					self.ignoreSignals = True
+					if inputId != groupMember:
+						self.idToRadioButton[groupMember].setChecked(False)
+					self.ignoreSignals = False
 					self.invocationJSON.pop(groupMember, None)
 
 	# def buttonClicked(self, inputId, name):
@@ -173,13 +179,15 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 	# 	self.invocationJSON[inputId] = QtWidgets.QFileDialog.getOpenFileName(self, 'Select ' + name)[0]
 	# 	self.invocationChanged.emit()
 	
-	def stringToList(string):
+	def stringToList(self, string):
 		try:
 			return json.loads("[" + string + "]")
 		except ValueError as e:
 			return None
 
 	def valueChanged(self, inputId):
+		if self.ignoreSignals:
+			return
 		self.removeMutuallyExclusiveParameters(inputId)
 		self.invocationJSON[inputId] = self.idToGetValue[inputId]()
 		self.invocationChanged.emit()
@@ -233,14 +241,16 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 			#	parentLayout:
 			#	childWidget:
 			#	getValue:
-			#   group: 
+			#	group:
+			# groups: 
 			#   	description: 
 			#		layout: 
 			# 		widget:
 			
-			self.idToGroupObjectAndLayout = {}
+			self.idToGroupObject = {}
 			self.idToInputObject = {}
 			self.idToGetValue = {}
+			self.idToRadioButton = {}
 
 			idToOptional = {}
 
@@ -258,7 +268,7 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 						groupObjectAndLayout = { "layout": groupAndLayout[1], "object": groupObject }
 						groupIsOptional = True
 						for member in groupObject["members"]:
-							self.idToGroupObjectAndLayout[member] = groupObjectAndLayout
+							self.idToGroupObject[member] = groupObjectAndLayout
 							if member in idToOptional and not idToOptional[member]:
 								groupIsOptional = False
 								break
@@ -274,8 +284,8 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 				
 				parentLayout = None
 
-				if inputId in self.idToGroupObjectAndLayout:
-					parentLayout = self.idToGroupObjectAndLayout[inputId]["layout"]
+				if inputId in self.idToGroupObject:
+					parentLayout = self.idToGroupObject[inputId]["layout"]
 				elif "optional" in inputObject and inputObject["optional"]:
 					parentLayout = optionalInputsLayout
 				else:
@@ -296,6 +306,7 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 
 					widget = QtWidgets.QRadioButton(inputObject["name"])
 					widget.setChecked(inputId in self.invocationJSON and self.invocationJSON[inputId])
+					self.idToRadioButton[inputId] = widget
 					# when the widget value changes, the invocationJSON is updated by calling getValue() (with the help of self.idToGetValue)
 					# getValue will be overriden if input is not a Flag
 					getValue = ( lambda widget: lambda: widget.isChecked() )(widget)
@@ -328,7 +339,7 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 						subWidget = QtWidgets.QLineEdit()
 						subWidget.setPlaceholderText("Comma seperated " + ("strings" if inputObject["type"] == "String" else "numbers") + ".")
 						listString = json.dumps(self.invocationJSON[inputId])
-						subWidget.setText(listString)
+						subWidget.setText(listString[1:-1])
 
 						getValue = ( lambda self, subWidget: lambda: self.stringToList(subWidget.text()) )(self, subWidget)
 						self.idToGetValue[inputId] = getValue
@@ -377,7 +388,8 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 						widget.stateChanged.connect( (lambda inputId: lambda: self.valueChanged(inputId) )(inputId) )
 						widget.setToolTip(inputObject["description"])
 
-				parentLayout.addWidget(widget)
+				if not inputIsMutuallyExclusive or inputObject["type"] != "Flag":
+					parentLayout.addWidget(widget)
 
 			for destinationLayout in destinationLayouts:
 				destinationLayout['parentLayout'].addWidget(destinationLayout['group'])
@@ -407,6 +419,7 @@ class InvocationWidget(QtWidgets.QWidget):
 		self.openInvocationButton = QtWidgets.QPushButton("Open invocation file")
 
 		self.invocationEditor = QtWidgets.QTextEdit()
+		self.invocationEditor.setMinimumHeight(300)
 		self.saveInvocationButton = QtWidgets.QPushButton("Save invocation file")
 
 		# self.layout.addWidget(self.invocationGroupBox)
