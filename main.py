@@ -158,31 +158,30 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 		self.group = None
 		self.setLayout(self.layout)
 	
-	def makeLambda(arg1, ):
-		return lambda: x
+	def inputIsMutuallyExclusive(self, inputId):
+		return inputId in self.idToGroupObjectAndLayout and "mutually-exclusive" in self.idToGroupObjectAndLayout[inputId]["object"] and self.idToGroupObjectAndLayout[inputId]["object"]["mutually-exclusive"]
 
-	def buttonClicked(self, id, name):
-		self.invocationJSON[id] = QtWidgets.QFileDialog.getOpenFileName(self, 'Select ' + name)[0]
-		self.invocationChanged.emit()
+	def removeMutuallyExclusiveParameters(self, inputId):
+		if self.inputIsMutuallyExclusive(inputId):
+			if "members" in self.idToGroupObjectAndLayout[inputId]["object"]:
+				groupMembers = self.idToGroupObjectAndLayout[inputId]["object"]["members"]
+				for groupMember in groupMembers:
+					self.invocationJSON.pop(groupMember, None)
+
+	# def buttonClicked(self, inputId, name):
+	# 	self.removeMutuallyExclusiveParameters(inputId)
+	# 	self.invocationJSON[inputId] = QtWidgets.QFileDialog.getOpenFileName(self, 'Select ' + name)[0]
+	# 	self.invocationChanged.emit()
 	
-	def listChanged(self, id, value):
+	def stringToList(string):
 		try:
-			self.invocationJSON[id] = json.loads("[" + value + "]")
-			self.invocationChanged.emit()
+			return json.loads("[" + string + "]")
 		except ValueError as e:
-			return
+			return None
 
-	def textChanged(self, id, value):
-		self.invocationJSON[id] = value
-		self.invocationChanged.emit()
-
-	def valueChanged(self, id, value):
-		self.invocationJSON[id] = value
-		self.invocationChanged.emit()
-
-	def stateChanged(self, id, value):
-		print('change: ' + id + ', value: ' + str(value))
-		self.invocationJSON[id] = value
+	def valueChanged(self, inputId):
+		self.removeMutuallyExclusiveParameters(inputId)
+		self.invocationJSON[inputId] = self.idToGetValue[inputId]()
 		self.invocationChanged.emit()
 
 	def createGroupAndLayout(self, name):
@@ -227,7 +226,21 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 			(mainInputsGroup, mainInputsLayout) = self.createGroupAndLayout("Main parameters")
 			(optionalInputsGroup, optionalInputsLayout) = self.createGroupAndLayout("Optional parameters")
 
-			idToGroupAndLayout = {}
+			# id =>
+			#	description:  
+			#	layout:
+			#	widget:
+			#	parentLayout:
+			#	childWidget:
+			#	getValue:
+			#   group: 
+			#   	description: 
+			#		layout: 
+			# 		widget:
+			
+			self.idToGroupObjectAndLayout = {}
+			self.idToInputObject = {}
+			self.idToGetValue = {}
 
 			idToOptional = {}
 
@@ -242,22 +255,66 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 					if "members" in groupObject:
 						groupName = groupObject["name"]
 						groupAndLayout = self.createGroupAndLayout(groupName)
+						groupObjectAndLayout = { "layout": groupAndLayout[1], "object": groupObject }
 						groupIsOptional = True
 						for member in groupObject["members"]:
-							idToGroupAndLayout[member] = groupAndLayout
+							self.idToGroupObjectAndLayout[member] = groupObjectAndLayout
 							if member in idToOptional and not idToOptional[member]:
 								groupIsOptional = False
 								break
 
-						destinationLayouts.append({"groupAndLayout": groupAndLayout, "layout": optionalInputsLayout if groupIsOptional else mainInputsLayout})
+						destinationLayouts.append({"group": groupAndLayout[0], "parentLayout": optionalInputsLayout if groupIsOptional else mainInputsLayout})
 
 			for inputObject in description["inputs"]:
 
 				widget = None
+
+				inputId = inputObject["id"]
+				self.idToInputObject[inputId] = inputObject
 				
+				parentLayout = None
+
+				if inputId in self.idToGroupObjectAndLayout:
+					parentLayout = self.idToGroupObjectAndLayout[inputId]["layout"]
+				elif "optional" in inputObject and inputObject["optional"]:
+					parentLayout = optionalInputsLayout
+				else:
+					parentLayout = mainInputsLayout
+
+				inputIsMutuallyExclusive = self.inputIsMutuallyExclusive(inputId)
+
+				# if input is part of a mutually exclusive group:
+				# 	create a horizontal layout to put the radio button 
+				#	along with the corresponding widget 
+				#	(an open file button, a text field or a spinbox when type is File, String or Number respectively) if necessary (nothing if type is Flag)
+				# 	the later widget will be a child of this horizontal layout, and the idToGetValue will be set accordingly
+				if inputIsMutuallyExclusive:
+
+					hWidget = QtWidgets.QWidget()
+					hLayout = QtWidgets.QHBoxLayout()
+					hWidget.setLayout(hLayout)
+
+					widget = QtWidgets.QRadioButton(inputObject["name"])
+					widget.setChecked(inputId in self.invocationJSON and self.invocationJSON[inputId])
+					# when the widget value changes, the invocationJSON is updated by calling getValue() (with the help of self.idToGetValue)
+					# getValue will be overriden if input is not a Flag
+					getValue = ( lambda widget: lambda: widget.isChecked() )(widget)
+					self.idToGetValue[inputId] = getValue
+					widget.toggled.connect( (lambda inputObject: lambda: self.valueChanged(inputObject["id"]) )(inputObject) )
+					widget.setToolTip(inputObject["description"])
+					hLayout.addWidget(widget)
+
+					parentLayout.addWidget(hWidget)
+					widget = hWidget
+					parentLayout = hLayout
+
 				if inputObject["type"] == "File":
 					widget = QtWidgets.QPushButton("Select " + inputObject["name"])
-					widget.clicked.connect( ( lambda inputObject: lambda: self.buttonClicked(inputObject["id"], inputObject["name"]) )(inputObject) )
+
+					getValue = ( lambda name: lambda: QtWidgets.QFileDialog.getOpenFileName(self, 'Select ' + name)[0] )(inputObject["name"])
+					self.idToGetValue[inputId] = getValue
+
+					widget.clicked.connect( ( lambda inputId: lambda: self.valueChanged(inputId) )(inputId) )
 
 				if inputObject["type"] == "String" or inputObject["type"] == "Number":
 
@@ -270,15 +327,23 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 					if "list" in inputObject and inputObject["list"]:
 						subWidget = QtWidgets.QLineEdit()
 						subWidget.setPlaceholderText("Comma seperated " + ("strings" if inputObject["type"] == "String" else "numbers") + ".")
-						listString = json.dumps(self.invocationJSON[inputObject["id"]])
+						listString = json.dumps(self.invocationJSON[inputId])
 						subWidget.setText(listString)
-						subWidget.textChanged.connect( (lambda inputObject, subWidget: lambda: self.listChanged(inputObject["id"], subWidget.text()) )(inputObject, subWidget) )
+
+						getValue = ( lambda self, subWidget: lambda: self.stringToList(subWidget.text()) )(self, subWidget)
+						self.idToGetValue[inputId] = getValue
+
+						subWidget.textChanged.connect( (lambda inputId: lambda: self.valueChanged(inputId) )(inputId) )
 					else:
 						if inputObject["type"] == "String":
 							subWidget = QtWidgets.QLineEdit()
 							subWidget.setPlaceholderText(inputObject["description"])
-							subWidget.setText(self.invocationJSON[inputObject["id"]])
-							subWidget.textChanged.connect( (lambda inputObject, subWidget: lambda: self.textChanged(inputObject["id"], subWidget.text()) )(inputObject, subWidget) )
+							subWidget.setText(self.invocationJSON[inputId])
+
+							getValue = ( lambda subWidget: lambda: subWidget.text() )(subWidget)
+							self.idToGetValue[inputId] = getValue
+
+							subWidget.textChanged.connect( (lambda inputId: lambda: self.valueChanged(inputId) )(inputId) )
 						else:
 							if "integer" in inputObject and inputObject["integer"]:
 								subWidget = QtWidgets.QSpinBox()
@@ -288,8 +353,12 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 								subWidget.setMinimum(inputObject["minimum"])
 							if "maximum" in inputObject:
 								subWidget.setMaximum(inputObject["maximum"])
-							subWidget.setValue(self.invocationJSON[inputObject["id"]])
-							subWidget.valueChanged.connect( (lambda inputObject, subWidget: lambda: self.valueChanged(inputObject["id"], subWidget.value()))(inputObject, subWidget) )
+							subWidget.setValue(self.invocationJSON[inputId])
+							
+							getValue = ( lambda subWidget: lambda: subWidget.value() )(subWidget)
+							self.idToGetValue[inputId] = getValue
+
+							subWidget.valueChanged.connect( (lambda inputId: lambda: self.valueChanged(inputId) )(inputId) )
 
 					widget.setToolTip(inputObject["description"])
 
@@ -298,20 +367,20 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 					widget.setLayout(layout)
 					
 				if inputObject["type"] == "Flag":
-					widget = QtWidgets.QCheckBox(inputObject["name"])
-					widget.setToolTip(inputObject["description"])
-					widget.setCheckState(Qt.Checked if self.invocationJSON[inputObject["id"]] else Qt.Unchecked)
-					widget.stateChanged.connect( (lambda inputObject, widget: lambda: self.stateChanged(inputObject["id"], widget.isChecked()) )(inputObject, widget) )
+					if not inputIsMutuallyExclusive:
+						widget = QtWidgets.QCheckBox(inputObject["name"])
+						widget.setCheckState(Qt.Checked if inputId in self.invocationJSON and self.invocationJSON[inputId] else Qt.Unchecked)
+						
+						getValue = ( lambda widget: lambda: widget.isChecked() )(widget)
+						self.idToGetValue[inputId] = getValue
 
-				if inputObject["id"] in idToGroupAndLayout:
-					idToGroupAndLayout[inputObject["id"]][1].addWidget(widget)
-				elif "optional" in inputObject and inputObject["optional"]:
-					optionalInputsLayout.addWidget(widget)
-				else:
-					mainInputsLayout.addWidget(widget)
+						widget.stateChanged.connect( (lambda inputId: lambda: self.valueChanged(inputId) )(inputId) )
+						widget.setToolTip(inputObject["description"])
+
+				parentLayout.addWidget(widget)
 
 			for destinationLayout in destinationLayouts:
-				destinationLayout['layout'].addWidget(destinationLayout['groupAndLayout'][0])
+				destinationLayout['parentLayout'].addWidget(destinationLayout['group'])
 
 			groupLayout.addWidget(mainInputsGroup)
 			groupLayout.addWidget(optionalInputsGroup)
@@ -367,7 +436,6 @@ class InvocationWidget(QtWidgets.QWidget):
 			self.invocationJSON = json.loads(output)
 		except ValueError as e:
 			self.invocationJSON = None
-			pass
 		self.invocationEditor.setText(output)
 
 	def openInvocationFile(self):
