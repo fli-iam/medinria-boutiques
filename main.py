@@ -405,15 +405,6 @@ class InvocationWidget(QtWidgets.QWidget):
 		self.searchToolsWidget = searchToolsWidget
 		self.layout = QtWidgets.QVBoxLayout()
 
-		# self.generateInvocationButton = QtWidgets.QPushButton("Generate invocation file")
-		# self.fullInvocationCheckbox = QtWidgets.QCheckBox("Full invocation")
-
-		# self.invocationGroupBox = QtWidgets.QGroupBox()
-		# self.invocationLayout = QtWidgets.QHBoxLayout()
-		# self.invocationLayout.addWidget(self.generateInvocationButton)
-		# self.invocationLayout.addWidget(self.fullInvocationCheckbox)
-		# self.invocationGroupBox.setLayout(self.invocationLayout)
-
 		self.invocationGUIWidget = InvocationGUIWidget(searchToolsWidget)
 
 		self.openInvocationButton = QtWidgets.QPushButton("Open invocation file")
@@ -422,13 +413,11 @@ class InvocationWidget(QtWidgets.QWidget):
 		self.invocationEditor.setMinimumHeight(300)
 		self.saveInvocationButton = QtWidgets.QPushButton("Save invocation file")
 
-		# self.layout.addWidget(self.invocationGroupBox)
 		self.layout.addWidget(self.openInvocationButton)
 		self.layout.addWidget(self.invocationGUIWidget)
 		self.layout.addWidget(self.invocationEditor)
 		self.layout.addWidget(self.saveInvocationButton)
 
-		# self.generateInvocationButton.clicked.connect(self.generateInvocationFile)
 		self.openInvocationButton.clicked.connect(self.openInvocationFile)
 		self.saveInvocationButton.clicked.connect(self.saveInvocationFile)
 		self.invocationGUIWidget.invocationChanged.connect(self.invocationChanged)
@@ -487,8 +476,12 @@ class ExecutionWidget(QtWidgets.QWidget):
 		super().__init__()
 		self.searchToolsWidget = searchToolsWidget
 		self.invocationWidget = invocationWidget
+
+		self.invocationWidget.invocationGUIWidget.invocationChanged.connect(self.invocationChanged)
 		self.layout = QtWidgets.QVBoxLayout()
 
+		self.generatedCommandLabel = QtWidgets.QLabel("Generated command:")
+		self.generatedCommand = QtWidgets.QTextEdit()
 		self.executeButton = QtWidgets.QPushButton("Execute tool")
 		self.cancelButton = QtWidgets.QPushButton("Cancel execution")
 		self.cancelButton.hide()
@@ -496,6 +489,8 @@ class ExecutionWidget(QtWidgets.QWidget):
 		self.output = QtWidgets.QTextEdit()
 		self.output.setReadOnly(True)
 
+		self.layout.addWidget(self.generatedCommandLabel)
+		self.layout.addWidget(self.generatedCommand)
 		self.layout.addWidget(self.executeButton)
 		self.layout.addWidget(self.cancelButton)
 		self.layout.addWidget(self.output)
@@ -511,11 +506,7 @@ class ExecutionWidget(QtWidgets.QWidget):
 
 		self.setLayout(self.layout)
 
-	def executeTool(self):
-		tool = self.searchToolsWidget.getSelectedTool()
-		if tool is None:
-			return
-
+	def getTemporaryInvocationFile(self):
 		temporaryInvocationFilePath = path.join(QtCore.QDir.tempPath(), "invocation.json")
 
 		invocationFile = open(temporaryInvocationFilePath,'w')
@@ -523,6 +514,25 @@ class ExecutionWidget(QtWidgets.QWidget):
 		with invocationFile:
 			invocationFile.write(self.invocationWidget.invocationEditor.toPlainText())
 
+		return temporaryInvocationFilePath
+
+	def invocationChanged(self):
+		tool = self.searchToolsWidget.getSelectedTool()
+		if tool is None:
+			return
+		temporaryInvocationFilePath = self.getTemporaryInvocationFile()
+
+		args = ["bosh", "exec", "simulate", "-i", temporaryInvocationFilePath, tool["id"]]
+		result = subprocess.run(args, capture_output=True)
+		output = result.stdout.decode("utf-8")
+		self.generatedCommand.setText(output)
+
+	def executeTool(self):
+		tool = self.searchToolsWidget.getSelectedTool()
+		if tool is None:
+			return
+
+		temporaryInvocationFilePath = self.getTemporaryInvocationFile()
 		args = ["exec", "launch", "-s", tool["id"], temporaryInvocationFilePath]
 
 		self.process.start('bosh', args)
