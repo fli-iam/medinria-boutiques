@@ -1,5 +1,7 @@
-**
-!main.py
-!LICENSE
-!README.md
-!boutiques-gui.png
+data/
+cpp/src/CMakeLists.txt.user
+cpp/build/
+python/bin/
+python/include/
+python/lib/
+python/share/

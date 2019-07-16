@@ -144,7 +144,7 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 
 		self.layout = QtWidgets.QVBoxLayout()
 		
-		self.setMinimumHeight(300)
+		self.setMinimumHeight(150)
 		# self.rootWidget.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Preferred)
 		# self.rootWidget.setHorizontalPolicy(QtWidgets.QSizePolicy.GrowFlag) # not working: no setHorizontalPolicy on a widget, only for layouts
 
@@ -410,7 +410,7 @@ class InvocationWidget(QtWidgets.QWidget):
 		self.openInvocationButton = QtWidgets.QPushButton("Open invocation file")
 
 		self.invocationEditor = QtWidgets.QTextEdit()
-		self.invocationEditor.setMinimumHeight(300)
+		self.invocationEditor.setMinimumHeight(150)
 		self.saveInvocationButton = QtWidgets.QPushButton("Save invocation file")
 
 		self.layout.addWidget(self.openInvocationButton)
