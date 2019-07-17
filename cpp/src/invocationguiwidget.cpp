@@ -1,3 +1,4 @@
+#include <iostream>
 #include <QtWidgets>
 #include "invocationguiwidget.h"
 
@@ -16,7 +17,8 @@ InvocationGUIWidget::InvocationGUIWidget(QWidget *parent, SearchToolsWidget *sea
     this->setLayout(this->layout);
 }
 
-bool InvocationGUIWidget::inputIsMutuallyExclusive(const string &inputId) {
+bool InvocationGUIWidget::inputIsMutuallyExclusive(const string &inputId)
+{
     try
     {
         const InputObject& inputObject = this->idToInputObject.at(inputId);
@@ -28,7 +30,8 @@ bool InvocationGUIWidget::inputIsMutuallyExclusive(const string &inputId) {
     }
 }
 
-void InvocationGUIWidget::removeMutuallyExclusiveParameters(const string& inputId) {
+void InvocationGUIWidget::removeMutuallyExclusiveParameters(const string &inputId)
+{
     if(this->inputIsMutuallyExclusive(inputId))
     {
         try
@@ -100,7 +103,6 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 
     QVBoxLayout *groupLayout = new QVBoxLayout(this->group);
     this->group->setLayout(groupLayout);
-
     SearchResult *searchResult = this->searchToolsWidget->getSelectedTool();
 
     QString descriptorFileName = QString::fromStdString(searchResult->id).replace(QChar('.'), QChar('-')) + "json";

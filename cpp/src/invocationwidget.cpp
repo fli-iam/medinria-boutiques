@@ -5,7 +5,7 @@ InvocationWidget::InvocationWidget(QWidget *parent, SearchToolsWidget *searchToo
 {
     this->layout = new QVBoxLayout();
 
-    this->invocationGUIWidget = new InvocationGUIWidget(this->searchToolsWidget);
+    this->invocationGUIWidget = new InvocationGUIWidget(this, this->searchToolsWidget);
     this->openInvocationButton = new QPushButton("Open invocation file");
 
     this->invocationEditor = new QTextEdit();

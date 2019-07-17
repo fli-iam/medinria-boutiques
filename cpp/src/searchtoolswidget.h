@@ -47,6 +47,7 @@ signals:
 public slots:
     void selectionChanged();
     void searchBoutiquesTools();
+    void errorOccurred();
     void processStarted();
     void processFinished(int exitCode, QProcess::ExitStatus exitStatus);
 

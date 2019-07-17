@@ -1,5 +1,6 @@
 data/
 cpp/src/CMakeLists.txt.user
+cpp/src/*.autosave
 cpp/build*
 python/bin/
 python/include/

@@ -65,6 +65,7 @@ void SearchToolsWidget::createTable()
 void SearchToolsWidget::createProcess()
 {
     this->process = new QProcess(this);
+    connect(this->process, &QProcess::errorOccurred, this, &SearchToolsWidget::errorOccurred);
     connect(this->process, &QProcess::started, this, &SearchToolsWidget::processStarted);
     connect(this->process, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::processFinished);
 }
@@ -102,6 +103,8 @@ void SearchToolsWidget::searchBoutiquesTools()
     this->process->kill();
     this->process->start(BOSH_PATH, {"search", "-m 50", searchQuery});
 
+    this->loadingLabel->setText("Search launched...");
+
     emit toolDeselected();
 
     this->searchResults.clear();
@@ -124,10 +127,15 @@ static inline string trim(string s) {
     return s;
 }
 
+void SearchToolsWidget::errorOccurred(QProcess::ProcessError error)
+{
+    Q_UNUSED(error)
+    this->loadingLabel->setText("An error occurred while searching the tool.");
+}
 
 void SearchToolsWidget::processStarted()
 {
-    cout << "Searching for tools..." << endl;
+    this->loadingLabel->setText("Searching for tools...");
 }
 
 void SearchToolsWidget::processFinished(int exitCode, QProcess::ExitStatus exitStatus)
@@ -167,7 +175,8 @@ void SearchToolsWidget::processFinished(int exitCode, QProcess::ExitStatus exitS
     for(unsigned int i=2 ; i<lines.size() ; i++){
         string line = lines[i];
 
-        SearchResult searchResult;
+        this->searchResults.emplace_back();
+        SearchResult& searchResult = this->searchResults.back();
         searchResult.id = trim(line.substr(idIndex, titleIndex - idIndex));
         searchResult.title = trim(line.substr(titleIndex, descriptionIndex - titleIndex));
         searchResult.description = trim(line.substr(descriptionIndex, downloadsIndex - descriptionIndex));
@@ -185,6 +194,5 @@ void SearchToolsWidget::processFinished(int exitCode, QProcess::ExitStatus exitS
         this->table->setItem(int(i-2), 2, new QTableWidgetItem(QString::fromStdString(searchResult.description)));
         this->table->setItem(int(i-2), 3, new QTableWidgetItem(QString::fromStdString(to_string(searchResult.downloads))));
 
-        this->searchResults.push_back(searchResult);
     }
 }
