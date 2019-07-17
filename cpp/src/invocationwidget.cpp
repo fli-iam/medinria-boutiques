@@ -9,7 +9,7 @@ InvocationWidget::InvocationWidget(QWidget *parent, SearchToolsWidget *searchToo
     this->openInvocationButton = new QPushButton("Open invocation file");
 
     this->invocationEditor = new QTextEdit();
-    this->invocationEditor->setMinimumHeight(300);
+    this->invocationEditor->setMinimumHeight(150);
     this->saveInvocationButton = new QPushButton("Save invocation file");
 
     this->layout->addWidget(this->openInvocationButton);
@@ -33,7 +33,13 @@ void InvocationWidget::generateInvocationFile()
     }
 
     QProcess bosh;
-    bosh.start(BOSH_PATH, {"example", "--complete", tool->id.c_str()});
+    QStringList args({"example"});
+    if(this->invocationGUIWidget->generateCompleteInvocation())
+    {
+        args.append("--complete");
+    }
+    args.append(tool->id.c_str());
+    bosh.start(BOSH_PATH, args);
     if (!bosh.waitForFinished()) {
         return;
     }

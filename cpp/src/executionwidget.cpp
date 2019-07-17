@@ -24,7 +24,7 @@ ExecutionWidget::ExecutionWidget(QWidget *parent, SearchToolsWidget *searchTools
     this->layout->addWidget(this->output);
 
     connect(this->executeButton, &QPushButton::clicked, this, &ExecutionWidget::executeTool);
-    connect(this->executeButton, &QPushButton::clicked, this, &ExecutionWidget::cancelExecution);
+    connect(this->cancelButton, &QPushButton::clicked, this, &ExecutionWidget::cancelExecution);
 
     this->process = new QProcess(this);
     connect(this->process, &QProcess::readyRead, this, &ExecutionWidget::dataReady);

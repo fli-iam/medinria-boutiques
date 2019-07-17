@@ -13,16 +13,16 @@ SearchToolsWidget::SearchToolsWidget(QWidget *parent) : QWidget(parent)
 
 //    Search input
     this->searchGroupBox = new QGroupBox();
-    QHBoxLayout *searchLayout = new QHBoxLayout(this->searchGroupBox);
+    QHBoxLayout *searchLayout = new QHBoxLayout();
     searchLayout->addWidget(this->searchLineEdit);
     searchLayout->addWidget(this->button);
     this->searchGroupBox->setLayout(searchLayout);
 
-    this->loadingLabel = new QLabel(tr("Loading..."));
+    this->loadingLabel = new QLabel("Loading...");
     this->loadingLabel->hide();
     this->createTable();
 
-    this->infoLabel = new QLabel(tr("Tool info"));
+    this->infoLabel = new QLabel("Tool info");
     this->infoLabel->hide();
     this->info = new QTextEdit();
     this->info->setReadOnly(true);

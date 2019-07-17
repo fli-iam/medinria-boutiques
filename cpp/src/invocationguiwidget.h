@@ -39,7 +39,9 @@ private:
     QVBoxLayout *layout;
     QScrollArea *scrollArea;
     QWidget *group;
+    QGroupBox *optionalInputGroup;
     QJsonObject *invocationJSON;
+    QJsonObject *completeInvocationJSON;
     map<string, InputObject> idToInputObject;
     vector<GroupObject> groupObjects;
     bool ignoreSignals;
@@ -47,6 +49,7 @@ private:
 public:
     explicit InvocationGUIWidget(QWidget *parent = nullptr, SearchToolsWidget *searchToolsWidget = nullptr);
     void parseDescriptor(QJsonObject *invocationJSON);
+    bool generateCompleteInvocation();
 
 private:
     bool inputIsMutuallyExclusive(const string &inputId);
@@ -59,6 +62,8 @@ signals:
     void invocationChanged();
 
 public slots:
+private slots:
+    void optionalGroupChanged(bool on);
 };
 
 #endif // INVOCATIONGUIWIDGET_H

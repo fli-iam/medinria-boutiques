@@ -16,7 +16,6 @@ class QGroupBox;
 class QLabel;
 class QTableWidget;
 class QTextEdit;
-class QProcess;
 QT_END_NAMESPACE
 
 using namespace std;
@@ -47,7 +46,7 @@ signals:
 public slots:
     void selectionChanged();
     void searchBoutiquesTools();
-    void errorOccurred();
+    void errorOccurred(QProcess::ProcessError error);
     void processStarted();
     void processFinished(int exitCode, QProcess::ExitStatus exitStatus);
 
