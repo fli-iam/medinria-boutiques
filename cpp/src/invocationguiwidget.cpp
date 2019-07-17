@@ -17,33 +17,41 @@ InvocationGUIWidget::InvocationGUIWidget(QWidget *parent, SearchToolsWidget *sea
 }
 
 bool InvocationGUIWidget::inputIsMutuallyExclusive(const string &inputId) {
-    try {
+    try
+    {
         const InputObject& inputObject = this->idToInputObject.at(inputId);
         return inputObject.group != nullptr && inputObject.group->description["mutually-exclusive"].toBool();
-    } catch (const out_of_range& oor) {
+    } catch (const out_of_range& oor)
+    {
         Q_UNUSED(oor)
         return false;
     }
 }
 
 void InvocationGUIWidget::removeMutuallyExclusiveParameters(const string& inputId) {
-    if(this->inputIsMutuallyExclusive(inputId)) {
-        try {
+    if(this->inputIsMutuallyExclusive(inputId))
+    {
+        try
+        {
             const InputObject& inputObject = this->idToInputObject.at(inputId);
-            if(inputObject.description.contains("members")) {
+            if(inputObject.description.contains("members"))
+            {
                 QJsonArray inputArray = inputObject.description["members"].toArray();
                 this->ignoreSignals = true;
-                for (int i=0 ; i<inputArray.size() ; ++i) {
+                for (int i=0 ; i<inputArray.size() ; ++i)
+                {
                     const QString& qmember = inputArray[i].toString();
                     const string& member = qmember.toStdString();
-                    if(this->idToInputObject.at(member).radioButton != nullptr) {
+                    if(this->idToInputObject.at(member).radioButton != nullptr)
+                    {
                         this->idToInputObject.at(member).radioButton->setChecked(false);
                     }
                     this->invocationJSON->remove(qmember);
                 }
                 this->ignoreSignals = false;
             }
-        } catch (const out_of_range& oor) {
+        } catch (const out_of_range& oor)
+        {
             Q_UNUSED(oor)
             return;
         }
@@ -54,11 +62,12 @@ QJsonArray InvocationGUIWidget::stringToArray(const string& string)
 {
     QJsonDocument jsonDocument(QJsonDocument::fromJson(QByteArray::fromStdString(string)));
     return jsonDocument.array();
-
 }
 
-void InvocationGUIWidget::valueChanged(const string& inputId) {
-    if(this->ignoreSignals) {
+void InvocationGUIWidget::valueChanged(const string& inputId)
+{
+    if(this->ignoreSignals)
+    {
         return;
     }
     this->removeMutuallyExclusiveParameters(inputId);
@@ -66,7 +75,8 @@ void InvocationGUIWidget::valueChanged(const string& inputId) {
     emit invocationChanged();
 }
 
-pair<QGroupBox *, QVBoxLayout *> InvocationGUIWidget::createGroupAndLayout(const string& name) {
+pair<QGroupBox *, QVBoxLayout *> InvocationGUIWidget::createGroupAndLayout(const string& name)
+{
     QGroupBox *group = new QGroupBox();
     group->setTitle(QString::fromStdString(name));
     QVBoxLayout *layout = new QVBoxLayout(group);
@@ -74,10 +84,12 @@ pair<QGroupBox *, QVBoxLayout *> InvocationGUIWidget::createGroupAndLayout(const
     return pair<QGroupBox *, QVBoxLayout *>(group, layout);
 }
 
-void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON) {
+void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
+{
     this->invocationJSON = invocationJSON;
 
-    if(this->group != nullptr) {
+    if(this->group != nullptr)
+    {
         this->scrollArea->takeWidget();
         this->group->deleteLater();
         this->group = nullptr;
@@ -105,13 +117,15 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON) {
     auto mainInputsGroupAndLayout = this->createGroupAndLayout("Main parameters");
     auto optionalInputsGroupAndLayout = this->createGroupAndLayout("Optional parameters");
 
-    if ( !(json.contains("inputs") && json["inputs"].isArray() && (!json.contains("groups") || json["groups"].isArray()) ) ) {
+    if ( !(json.contains("inputs") && json["inputs"].isArray() && (!json.contains("groups") || json["groups"].isArray()) ) )
+    {
         QMessageBox::critical(this, "Error in descriptor file", "No inputs or groups.");
         return;
     }
 
     QJsonArray inputArray = json["inputs"].toArray();
-    for (int i = 0 ; i<inputArray.size() ; ++i) {
+    for (int i = 0 ; i<inputArray.size() ; ++i)
+    {
         InputObject inputObject;
         inputObject.description = inputArray[i].toObject();
         this->idToInputObject.insert(pair<string, InputObject>(inputObject.description["id"].toString().toStdString(), inputObject));
@@ -286,7 +300,8 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON) {
 
         if(inputType == "Flag")
         {
-            if(!inputIsMutuallyExclusive) {
+            if(!inputIsMutuallyExclusive)
+            {
                 QCheckBox *checkBox = new QCheckBox(inputName);
                 checkBox->setCheckState(inputValue.toBool() ? Qt::Checked : Qt::Unchecked);
 

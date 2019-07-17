@@ -90,6 +90,7 @@ class SearchToolsWidget(QtWidgets.QWidget):
 
 		searchQuery = self.searchLineEdit.text()
 		args = ["search", "-m 50", searchQuery]
+		self.process.kill()
 		self.process.start('bosh', args)
 		self.toolDeselected.emit()
 		self.searchResults = []

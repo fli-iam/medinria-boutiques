@@ -1,7 +1,7 @@
-#include <QtWidgets>
 #include <iostream>
 #include <string>
 #include <regex>
+#include <QtWidgets>
 #include "searchtoolswidget.h"
 
 
@@ -65,6 +65,7 @@ void SearchToolsWidget::createTable()
 void SearchToolsWidget::createProcess()
 {
     this->process = new QProcess(this);
+    connect(this->process, &QProcess::started, this, &SearchToolsWidget::processStarted);
     connect(this->process, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::processFinished);
 }
 
@@ -76,7 +77,7 @@ void SearchToolsWidget::selectionChanged()
     }
 
     QProcess bosh;
-    bosh.start("bosh", {"pprint", tool->id.c_str()});
+    bosh.start(BOSH_PATH, {"pprint", tool->id.c_str()});
     if (!bosh.waitForFinished()) {
         return;
     }
@@ -97,7 +98,10 @@ void SearchToolsWidget::searchBoutiquesTools()
     this->info->hide();
 
     QString searchQuery = this->searchLineEdit->text();
-    this->process->start("bosh", {"search", "-m 50", searchQuery});
+
+    this->process->kill();
+    this->process->start(BOSH_PATH, {"search", "-m 50", searchQuery});
+
     emit toolDeselected();
 
     this->searchResults.clear();
@@ -105,16 +109,12 @@ void SearchToolsWidget::searchBoutiquesTools()
 
 // trim from start (in place)
 static inline void ltrim(string &s) {
-    s.erase(s.begin(), find_if(s.begin(), s.end(), [](int ch) {
-        return !isspace(ch);
-    }));
+    s.erase(s.begin(), find_if(s.begin(), s.end(), [](int ch) { return !isspace(ch); }));
 }
 
 // trim from end (in place)
 static inline void rtrim(string &s) {
-    s.erase(find_if(s.rbegin(), s.rend(), [](int ch) {
-        return !isspace(ch);
-    }).base(), s.end());
+    s.erase(find_if(s.rbegin(), s.rend(), [](int ch) { return !isspace(ch); }).base(), s.end());
 }
 
 // trim from both ends (in place)
@@ -125,9 +125,15 @@ static inline string trim(string s) {
 }
 
 
-void SearchToolsWidget::processFinished(int exitCode)
+void SearchToolsWidget::processStarted()
+{
+    cout << "Searching for tools..." << endl;
+}
+
+void SearchToolsWidget::processFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     Q_UNUSED(exitCode)
+    Q_UNUSED(exitStatus)
 
     this->loadingLabel->hide();
     this->table->show();
@@ -141,10 +147,12 @@ void SearchToolsWidget::processFinished(int exitCode)
     stringstream outputSream(outputClean);
     string line;
     vector<string> lines;
-    while (getline(outputSream, line)) {
+    while (getline(outputSream, line))
+    {
         lines.push_back(line);
     }
-    if(lines.size() < 2) {
+    if(lines.size() < 2)
+    {
         return;
     }
 
@@ -156,14 +164,21 @@ void SearchToolsWidget::processFinished(int exitCode)
     this->table->setRowCount(int(lines.size() - 2));
 
     searchResults.clear();
-    for(unsigned int i=2 ; i<lines.size() ; i++) {
+    for(unsigned int i=2 ; i<lines.size() ; i++){
         string line = lines[i];
 
         SearchResult searchResult;
         searchResult.id = trim(line.substr(idIndex, titleIndex - idIndex));
         searchResult.title = trim(line.substr(titleIndex, descriptionIndex - titleIndex));
         searchResult.description = trim(line.substr(descriptionIndex, downloadsIndex - descriptionIndex));
-        searchResult.downloads = stoi(trim(line.substr(downloadsIndex, line.size() - 1 - downloadsIndex)));
+        try
+        {
+            searchResult.downloads = stoi(trim(line.substr(downloadsIndex, line.size() - 1)));
+        } catch (const invalid_argument& ia)
+        {
+            Q_UNUSED(ia)
+            continue;
+        }
 
         this->table->setItem(int(i-2), 0, new QTableWidgetItem(QString::fromStdString(searchResult.id)));
         this->table->setItem(int(i-2), 1, new QTableWidgetItem(QString::fromStdString(searchResult.title)));

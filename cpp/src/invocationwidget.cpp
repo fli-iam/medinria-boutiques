@@ -33,7 +33,7 @@ void InvocationWidget::generateInvocationFile()
     }
 
     QProcess bosh;
-    bosh.start("bosh", {"example", "--complete", tool->id.c_str()});
+    bosh.start(BOSH_PATH, {"example", "--complete", tool->id.c_str()});
     if (!bosh.waitForFinished()) {
         return;
     }
@@ -49,7 +49,9 @@ void InvocationWidget::openInvocationFile()
 
     QFile file(name);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
         return;
+    }
 
     QByteArray text = file.readAll();
     this->invocationEditor->setText(text);

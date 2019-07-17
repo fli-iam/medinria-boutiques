@@ -13,6 +13,7 @@ public:
     SearchToolsWidget *searchToolsWidget;
     InvocationWidget *invocationWidget;
     ExecutionWidget *executionWidget;
+    QWidget *centralWidget;
     QLayout *layout;
 
 private:

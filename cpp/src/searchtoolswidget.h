@@ -3,6 +3,9 @@
 
 #include <vector>
 #include <QWidget>
+#include <QProcess>
+
+#define BOSH_PATH "../bosh"
 
 QT_BEGIN_NAMESPACE
 class QVBoxLayout;
@@ -44,7 +47,8 @@ signals:
 public slots:
     void selectionChanged();
     void searchBoutiquesTools();
-    void processFinished(int exitCode);
+    void processStarted();
+    void processFinished(int exitCode, QProcess::ExitStatus exitStatus);
 
 private:
     QLineEdit* searchLineEdit;

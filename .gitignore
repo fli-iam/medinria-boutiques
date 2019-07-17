@@ -1,6 +1,6 @@
 data/
 cpp/src/CMakeLists.txt.user
-cpp/build/
+cpp/build*
 python/bin/
 python/include/
 python/lib/

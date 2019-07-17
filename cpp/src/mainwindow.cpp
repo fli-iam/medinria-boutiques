@@ -16,11 +16,13 @@ MainWindow::MainWindow(QWidget *parent)
     connect(this->searchToolsWidget, &SearchToolsWidget::toolDeselected, this->invocationWidget, &InvocationWidget::toolDeselected);
     connect(this->searchToolsWidget, &SearchToolsWidget::toolDeselected, this->executionWidget, &ExecutionWidget::toolDeselected);
 
+    this->centralWidget = new QWidget();
     this->layout = new QVBoxLayout();
     this->layout->addWidget(this->searchToolsWidget);
     this->layout->addWidget(this->invocationWidget);
     this->layout->addWidget(this->executionWidget);
-    this->setLayout(this->layout);
+    this->centralWidget->setLayout(this->layout);
+    this->setCentralWidget(centralWidget);
 }
 
 MainWindow::~MainWindow()

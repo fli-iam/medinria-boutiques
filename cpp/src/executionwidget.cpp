@@ -2,46 +2,6 @@
 #include <QtWidgets>
 #include "executionwidget.h"
 
-
-/*
-class ExecutionWidget(QtWidgets.QWidget):
-    def __init__(self, searchToolsWidget, invocationWidget):
-        super().__init__()
-        self.searchToolsWidget = searchToolsWidget
-        self.invocationWidget = invocationWidget
-
-        self.invocationWidget.invocationGUIWidget.invocationChanged.connect(self.invocationChanged)
-        self.layout = QtWidgets.QVBoxLayout()
-
-        self.generatedCommandLabel = QtWidgets.QLabel("Generated command:")
-        self.generatedCommand = QtWidgets.QTextEdit()
-        self.executeButton = QtWidgets.QPushButton("Execute tool")
-        self.cancelButton = QtWidgets.QPushButton("Cancel execution")
-        self.cancelButton.hide()
-
-        self.output = QtWidgets.QTextEdit()
-        self.output.setReadOnly(True)
-
-        self.layout.addWidget(self.generatedCommandLabel)
-        self.layout.addWidget(self.generatedCommand)
-        self.layout.addWidget(self.executeButton)
-        self.layout.addWidget(self.cancelButton)
-        self.layout.addWidget(self.output)
-
-        self.executeButton.clicked.connect(self.executeTool)
-        self.cancelButton.clicked.connect(self.cancelExecution)
-
-        self.process = QtCore.QProcess(self)
-        self.process.readyRead.connect(self.dataReady)
-
-        self.process.started.connect(self.processStarted)
-        self.process.finished.connect(self.processFinished)
-
-        self.setLayout(self.layout)
-
-
-      */
-
 ExecutionWidget::ExecutionWidget(QWidget *parent, SearchToolsWidget *searchToolsWidget, InvocationWidget *invocationWidget) :
     QWidget(parent), searchToolsWidget(searchToolsWidget), invocationWidget(invocationWidget)
 {
@@ -99,8 +59,9 @@ void ExecutionWidget::invocationChanged()
     QString temporaryInvocationFilePath = this->getTemporaryInvocationFile();
 
     QProcess bosh;
-    bosh.start("bosh", {"exec", "simulate", "-i", temporaryInvocationFilePath.toStdString().c_str(), tool->id.c_str()});
-    if (!bosh.waitForFinished()) {
+    bosh.start(BOSH_PATH, {"exec", "simulate", "-i", temporaryInvocationFilePath.toStdString().c_str(), tool->id.c_str()});
+    if (!bosh.waitForFinished())
+    {
         return;
     }
 
@@ -119,7 +80,7 @@ void ExecutionWidget::executeTool()
 
     QString temporaryInvocationFilePath = this->getTemporaryInvocationFile();
 
-    this->process->start("bosh", {"exec", "launch", "-s", tool->id.c_str(), temporaryInvocationFilePath.toStdString().c_str()});
+    this->process->start(BOSH_PATH, {"exec", "launch", "-s", tool->id.c_str(), temporaryInvocationFilePath.toStdString().c_str()});
     this->output->clear();
 }
 
