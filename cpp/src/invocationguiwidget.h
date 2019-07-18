@@ -12,12 +12,14 @@ class QScrollArea;
 class QJsonObject;
 class QDoubleSpinBox;
 class QRadioButton;
+class QComboBox;
 QT_END_NAMESPACE
 
 struct GroupObject {
     QJsonObject description;
     QLayout *layout = nullptr;
     QWidget *widget = nullptr;
+    QComboBox *comboBox = nullptr;
 };
 
 struct InputObject {

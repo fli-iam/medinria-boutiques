@@ -28,10 +28,6 @@ bool InvocationGUIWidget::inputIsMutuallyExclusive(const string &inputId)
         return false;
     }
     const InputObject& inputObject = it->second;
-    cout << inputObject.group << endl;
-    cout << &inputObject.group->description << endl;
-    cout << inputObject.group->description.contains("mutually-exclusive") << endl;
-    cout << inputObject.group->description["mutually-exclusive"].toBool() << endl;
     return inputObject.group != nullptr && inputObject.group->description["mutually-exclusive"].toBool();
 }
 
@@ -211,6 +207,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
     this->groupObjects.clear();
     vector<pair<QGroupBox*, QVBoxLayout*>> destinationLayouts;
     QJsonArray groupArray = json["groups"].toArray();
+    this->groupObjects.reserve(static_cast<size_t>(groupArray.size()));
     for (int i = 0 ; i<groupArray.size() ; ++i)
     {
         this->groupObjects.emplace_back();
@@ -224,7 +221,6 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         groupObject.widget = groupAndLayout.first;
         groupObject.layout = groupAndLayout.second;
         bool groupIsOptional = true;
-        destinationLayouts.push_back(groupAndLayout);
         QJsonArray memberArray = groupObject.description["members"].toArray();
         for (int j = 0 ; j<memberArray.size() ; ++j)
         {
@@ -234,11 +230,12 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                 continue;
             }
             InputObject &inputObject = it->second;
-            inputObject.group = &this->groupObjects.back();
+            inputObject.group = &groupObject;
             if(inputObject.description["optional"].toBool()) {
                 groupIsOptional = false;
             }
         }
+        destinationLayouts.push_back(pair<QGroupBox*, QVBoxLayout*>(groupAndLayout.first, groupIsOptional ? optionalInputsGroupAndLayout.second : mainInputsGroupAndLayout.second));
     }
 
     for (auto& idAndInputObject: idToInputObject)
@@ -262,10 +259,10 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
             parentLayout = mainInputsGroupAndLayout.second;
         }
 
-        const QString& inputName = inputObject.description["name"].toString();
-        const QString& inputType = inputObject.description["type"].toString();
-        const QString& inputDescription = inputObject.description["description"].toString();
-        const QJsonValue& inputValue = this->invocationJSON->value(QString::fromStdString(inputId));
+        const QString &inputName = inputObject.description["name"].toString();
+        const QString &inputType = inputObject.description["type"].toString();
+        const QString &inputDescription = inputObject.description["description"].toString();
+        const QJsonValue &inputValue = this->invocationJSON->value(QString::fromStdString(inputId));
 
         bool inputIsMutuallyExclusive = this->inputIsMutuallyExclusive(inputId);
 
@@ -274,31 +271,40 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         //      along with the corresponding widget
         //      (an open file button, a text field or a spinbox when type is File, String or Number respectively) if necessary (nothing if type is Flag)
         //      the later widget will be a child of this horizontal layout, and the idToGetValue will be set accordingly
+//        if(inputIsMutuallyExclusive)
+//        {
+//            QWidget *hWidget = new QWidget();
+//            QHBoxLayout *hLayout = new QHBoxLayout(hWidget);
+//            hWidget->setLayout(hLayout);
+//            QRadioButton *radioButton = new QRadioButton(inputName, hWidget);
+//            radioButton->setChecked(inputValue.toBool());
+//            inputObject.radioButton = radioButton;
+
+//            // when the widget value changes, the invocationJSON is updated by calling getValue() (with the help of self.idToGetValue)
+//            // getValue will be overriden if input is not a Flag
+
+//            inputObject.getValue = [radioButton]() { return QJsonValue(radioButton->isChecked()); };
+//            connect(radioButton, &QRadioButton::toggled, [this, inputId]() { this->valueChanged(inputId); } );
+//            radioButton->setToolTip(inputDescription);
+//            hLayout->addWidget(radioButton);
+//            parentLayout->addWidget(hWidget);
+//            parentLayout = hLayout;
+//            widget = hWidget;
+//        }
         if(inputIsMutuallyExclusive)
         {
-            QWidget *hWidget = new QWidget();
-            QHBoxLayout *hLayout = new QHBoxLayout(hWidget);
-            hWidget->setLayout(hLayout);
-            QRadioButton *radioButton = new QRadioButton(inputName, hWidget);
-            widget = radioButton;
-            radioButton->setChecked(inputValue.toBool());
-            inputObject.radioButton = radioButton;
-
-            // when the widget value changes, the invocationJSON is updated by calling getValue() (with the help of self.idToGetValue)
-            // getValue will be overriden if input is not a Flag
-
-            inputObject.getValue = [radioButton]() { return QJsonValue(radioButton->isChecked()); };
-            connect(radioButton, &QRadioButton::toggled, [this, inputId]() { this->valueChanged(inputId); } );
-            widget->setToolTip(inputDescription);
-            hLayout->addWidget(widget);
-            parentLayout = hLayout;
-            widget = hWidget;
+            if(inputObject.group->comboBox == nullptr)
+            {
+                QComboBox *comboBox = new QComboBox();
+                inputObject.group->comboBox = comboBox;
+                parentLayout->addWidget(comboBox);
+            }
+            inputObject.group->comboBox->addItem(inputName);
         }
-
 
         if(inputType == "File")
         {
-            QPushButton *pushButton= new QPushButton("Select" + inputObject.description["name"].toString());
+            QPushButton *pushButton = new QPushButton("Select" + inputObject.description["name"].toString());
             widget = pushButton;
 
             inputObject.getValue = [this, inputName]() { return QJsonValue(QFileDialog::getOpenFileName(this, "Select " + inputName)); };
@@ -378,8 +384,8 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 
         if(inputType == "Flag")
         {
-            if(!inputIsMutuallyExclusive)
-            {
+//            if(!inputIsMutuallyExclusive)
+//            {
                 QCheckBox *checkBox = new QCheckBox(inputName);
                 checkBox->setCheckState(inputValue.toBool() ? Qt::Checked : Qt::Unchecked);
 
@@ -387,13 +393,18 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                 connect(checkBox, &QCheckBox::stateChanged, [this, inputId](){ this->valueChanged(inputId); });
                 checkBox->setToolTip(inputDescription);
                 widget = checkBox;
-            }
+//            }
         }
 
-        if(!inputIsMutuallyExclusive || inputType != "Flag")
+//        if( (!inputIsMutuallyExclusive || inputType != "Flag") && widget != nullptr)
+//        {
+//            parentLayout->addWidget(widget);
+//        }
+        if(inputIsMutuallyExclusive && inputValue.isNull())
         {
-            parentLayout->addWidget(widget);
+            widget->hide();
         }
+        parentLayout->addWidget(widget);
     }
     for(auto& destinationLayout: destinationLayouts)
     {
