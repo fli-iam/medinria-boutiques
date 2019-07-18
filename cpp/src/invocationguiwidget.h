@@ -18,17 +18,14 @@ QT_END_NAMESPACE
 struct GroupObject {
     QJsonObject description;
     QLayout *layout = nullptr;
-    QWidget *widget = nullptr;
+    QGroupBox *groupBox = nullptr;
     QComboBox *comboBox = nullptr;
+    bool optional;
 };
 
 struct InputObject {
     QJsonObject description;
-    QWidget *parent = nullptr;
-    QLayout *layout = nullptr;
     QWidget *widget = nullptr;
-    QWidget *childWidget = nullptr;
-    QRadioButton *radioButton = nullptr;
     GroupObject *group = nullptr;
     std::function<QJsonValue()> getValue;
 };
@@ -54,7 +51,7 @@ public:
     bool generateCompleteInvocation();
 
 private:
-    bool inputIsMutuallyExclusive(const string &inputId);
+    bool inputGroupIsMutuallyExclusive(const string &inputId);
     pair<QGroupBox *, QVBoxLayout *> createGroupAndLayout(const string &name);
     void valueChanged(const string &inputId);
     void removeMutuallyExclusiveParameters(const string &inputId);
@@ -66,6 +63,7 @@ signals:
 public slots:
 private slots:
     void optionalGroupChanged(bool on);
+    void mutuallyExclusiveGroupChanged(GroupObject *groupObject, int itemIndex);
 };
 
 #endif // INVOCATIONGUIWIDGET_H

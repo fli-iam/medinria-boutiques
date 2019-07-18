@@ -20,34 +20,34 @@ InvocationGUIWidget::InvocationGUIWidget(QWidget *parent, SearchToolsWidget *sea
     this->setLayout(this->layout);
 }
 
-bool InvocationGUIWidget::inputIsMutuallyExclusive(const string &inputId)
+bool InvocationGUIWidget::inputGroupIsMutuallyExclusive(const string &inputId)
 {
     auto it = this->idToInputObject.find(inputId);
     if(it == this->idToInputObject.end())
     {
         return false;
     }
-    const InputObject& inputObject = it->second;
+    const InputObject &inputObject = it->second;
     return inputObject.group != nullptr && inputObject.group->description["mutually-exclusive"].toBool();
 }
 
 void InvocationGUIWidget::removeMutuallyExclusiveParameters(const string &inputId)
 {
-    if(this->inputIsMutuallyExclusive(inputId))
+    if(this->inputGroupIsMutuallyExclusive(inputId))
     {
-        const InputObject& inputObject = this->idToInputObject.at(inputId);
-        if(inputObject.description.contains("members"))
+        GroupObject *groupObject = this->idToInputObject.at(inputId).group;
+        if(groupObject != nullptr && groupObject->description.contains("members"))
         {
-            QJsonArray inputArray = inputObject.description["members"].toArray();
+            QJsonArray inputArray = groupObject->description["members"].toArray();
             this->ignoreSignals = true;
             for (int i=0 ; i<inputArray.size() ; ++i)
             {
-                const QString& member = inputArray[i].toString();
+                const QString &member = inputArray[i].toString();
                 auto it = this->idToInputObject.find(member.toStdString());
-                if(it != this->idToInputObject.end() && it->second.radioButton != nullptr)
-                {
-                    it->second.radioButton->setChecked(false);
-                }
+//                if(it != this->idToInputObject.end() && it->second.radioButton != nullptr)
+//                {
+//                    it->second.radioButton->setChecked(false);
+//                }
                 this->invocationJSON->remove(member);
             }
             this->ignoreSignals = false;
@@ -67,8 +67,16 @@ void InvocationGUIWidget::valueChanged(const string& inputId)
     {
         return;
     }
-    this->removeMutuallyExclusiveParameters(inputId);
-    this->invocationJSON->insert(QString::fromStdString(inputId), this->idToInputObject.at(inputId).getValue());
+    const InputObject &inputObject = this->idToInputObject.at(inputId);
+    const QJsonValue &value = inputObject.getValue();
+    if(inputObject.description["list"].toBool() && (!value.isArray() || value.toArray().isEmpty()) )
+    {
+        this->invocationJSON->remove(QString::fromStdString(inputId));
+    }
+    else
+    {
+        this->invocationJSON->insert(QString::fromStdString(inputId), value);
+    }
     emit invocationChanged();
 }
 
@@ -122,13 +130,47 @@ void InvocationGUIWidget::optionalGroupChanged(bool on)
     emit invocationChanged();
 }
 
-pair<QGroupBox *, QVBoxLayout *> InvocationGUIWidget::createGroupAndLayout(const string& name)
+pair<QGroupBox *, QVBoxLayout *> InvocationGUIWidget::createGroupAndLayout(const string &name)
 {
     QGroupBox *group = new QGroupBox();
     group->setTitle(QString::fromStdString(name));
     QVBoxLayout *layout = new QVBoxLayout(group);
     group->setLayout(layout);
     return pair<QGroupBox *, QVBoxLayout *>(group, layout);
+}
+
+void InvocationGUIWidget::mutuallyExclusiveGroupChanged(GroupObject *groupObject, int itemIndex)
+{
+    if(groupObject->comboBox->count() == 0)
+    {
+        return;
+    }
+    const auto &members= groupObject->description["members"].toArray();
+    for(const auto &member: members)
+    {
+        const QString &memberId = member.toString();
+        const auto &it = this->idToInputObject.find(memberId.toStdString());
+        this->invocationJSON->remove(memberId);
+        if(it == this->idToInputObject.end() || it->second.widget == nullptr)
+        {
+            continue;
+        }
+        it->second.widget->hide();
+    }
+
+    const QString &inputId = groupObject->comboBox->itemData(itemIndex).toString();
+    InputObject &inputObject = this->idToInputObject.at(inputId.toStdString());
+    if(inputObject.widget != nullptr)
+    {
+        inputObject.widget->show();
+        this->invocationJSON->insert(inputId, inputObject.getValue());
+    }
+    else
+    {
+        this->invocationJSON->insert(inputId, QJsonValue(true));
+    }
+
+    emit invocationChanged();
 }
 
 void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
@@ -218,7 +260,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
             continue;
         }
         auto groupAndLayout = this->createGroupAndLayout(groupObject.description["name"].toString().toStdString());
-        groupObject.widget = groupAndLayout.first;
+        groupObject.groupBox = groupAndLayout.first;
         groupObject.layout = groupAndLayout.second;
         bool groupIsOptional = true;
         QJsonArray memberArray = groupObject.description["members"].toArray();
@@ -231,10 +273,12 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
             }
             InputObject &inputObject = it->second;
             inputObject.group = &groupObject;
-            if(inputObject.description["optional"].toBool()) {
+            const QJsonValue &isOptional= inputObject.description["optional"];
+            if(isOptional.isNull() || (isOptional.isBool() && !isOptional.toBool()) ) {
                 groupIsOptional = false;
             }
         }
+        groupObject.optional = groupIsOptional;
         destinationLayouts.push_back(pair<QGroupBox*, QVBoxLayout*>(groupAndLayout.first, groupIsOptional ? optionalInputsGroupAndLayout.second : mainInputsGroupAndLayout.second));
     }
 
@@ -242,13 +286,14 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
     {
         const string &inputId = idAndInputObject.first;
         InputObject &inputObject = idAndInputObject.second;
+        GroupObject *groupObject = inputObject.group;
 
         QWidget *widget = nullptr;
         QLayout *parentLayout = nullptr;
 
-        if(inputObject.group != nullptr)
+        if(groupObject != nullptr)
         {
-            parentLayout = inputObject.group->layout;
+            parentLayout = groupObject->layout;
         }
         else if(inputObject.description["optional"].toBool())
         {
@@ -264,14 +309,14 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         const QString &inputDescription = inputObject.description["description"].toString();
         const QJsonValue &inputValue = this->invocationJSON->value(QString::fromStdString(inputId));
 
-        bool inputIsMutuallyExclusive = this->inputIsMutuallyExclusive(inputId);
+        bool inputGroupIsMutuallyExclusive = this->inputGroupIsMutuallyExclusive(inputId);
 
         //  if input is part of a mutually exclusive group:
         //      create a horizontal layout to put the radio button
         //      along with the corresponding widget
         //      (an open file button, a text field or a spinbox when type is File, String or Number respectively) if necessary (nothing if type is Flag)
         //      the later widget will be a child of this horizontal layout, and the idToGetValue will be set accordingly
-//        if(inputIsMutuallyExclusive)
+//        if(inputGroupIsMutuallyExclusive)
 //        {
 //            QWidget *hWidget = new QWidget();
 //            QHBoxLayout *hLayout = new QHBoxLayout(hWidget);
@@ -291,20 +336,42 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 //            parentLayout = hLayout;
 //            widget = hWidget;
 //        }
-        if(inputIsMutuallyExclusive)
+        if(inputGroupIsMutuallyExclusive)
         {
-            if(inputObject.group->comboBox == nullptr)
+            if(groupObject->comboBox == nullptr)
             {
                 QComboBox *comboBox = new QComboBox();
-                inputObject.group->comboBox = comboBox;
+                groupObject->comboBox = comboBox;
                 parentLayout->addWidget(comboBox);
+                connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [this, groupObject](int itemIndex) { this->mutuallyExclusiveGroupChanged(groupObject, itemIndex); } );
+                if(groupObject->optional)
+                {
+                    groupObject->groupBox->setCheckable(true);
+                    connect(groupObject->groupBox, &QGroupBox::toggled, this, [this, groupObject](bool on) {
+                        const QString &inputId = groupObject->comboBox->currentData().toString();
+                        if(on)
+                        {
+                            InputObject &inputObject = this->idToInputObject.at(inputId.toStdString());
+                            this->invocationJSON->insert(inputId, inputObject.widget != nullptr ? inputObject.getValue() : QJsonValue(true));
+                        }
+                        else
+                        {
+                            this->invocationJSON->remove(inputId);
+                        }
+                        emit invocationChanged();
+                    } );
+                }
             }
-            inputObject.group->comboBox->addItem(inputName);
+            groupObject->comboBox->addItem(inputName, QVariant(QString::fromStdString(inputId)));
+            if(!inputValue.isNull())
+            {
+                groupObject->comboBox->setCurrentIndex(groupObject->comboBox->count() - 1);
+            }
         }
 
         if(inputType == "File")
         {
-            QPushButton *pushButton = new QPushButton("Select" + inputObject.description["name"].toString());
+            QPushButton *pushButton = new QPushButton("Select " + inputObject.description["name"].toString());
             widget = pushButton;
 
             inputObject.getValue = [this, inputName]() { return QJsonValue(QFileDialog::getOpenFileName(this, "Select " + inputName)); };
@@ -354,7 +421,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                             spinBox->setMinimum(static_cast<int>(inputObject.description["minimum"].toDouble()));
                         }
                         if(inputObject.description["maximum"].isDouble()) {
-                            spinBox->setMinimum(static_cast<int>(inputObject.description["maximum"].toDouble()));
+                            spinBox->setMaximum(static_cast<int>(inputObject.description["maximum"].toDouble()));
                         }
                         spinBox->setValue(static_cast<int>(inputValue.toDouble()));
                         inputObject.getValue = [spinBox](){ return QJsonValue(spinBox->value()); };
@@ -368,9 +435,10 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                             spinBox->setMinimum(inputObject.description["minimum"].toDouble());
                         }
                         if(inputObject.description["maximum"].isDouble()) {
-                            spinBox->setMinimum(inputObject.description["maximum"].toDouble());
+                            spinBox->setMaximum(inputObject.description["maximum"].toDouble());
                         }
                         spinBox->setValue(inputValue.toDouble());
+                        spinBox->setDecimals(4);
                         inputObject.getValue = [spinBox](){ return QJsonValue(spinBox->value()); };
                         connect(spinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, inputId](){ this->valueChanged(inputId); });
                         subWidget = spinBox;
@@ -384,8 +452,8 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 
         if(inputType == "Flag")
         {
-//            if(!inputIsMutuallyExclusive)
-//            {
+            if(!inputGroupIsMutuallyExclusive)
+            {
                 QCheckBox *checkBox = new QCheckBox(inputName);
                 checkBox->setCheckState(inputValue.toBool() ? Qt::Checked : Qt::Unchecked);
 
@@ -393,18 +461,18 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                 connect(checkBox, &QCheckBox::stateChanged, [this, inputId](){ this->valueChanged(inputId); });
                 checkBox->setToolTip(inputDescription);
                 widget = checkBox;
-//            }
+            }
         }
 
-//        if( (!inputIsMutuallyExclusive || inputType != "Flag") && widget != nullptr)
-//        {
-//            parentLayout->addWidget(widget);
-//        }
-        if(inputIsMutuallyExclusive && inputValue.isNull())
+        if(!inputGroupIsMutuallyExclusive || inputType != "Flag")
+        {
+            parentLayout->addWidget(widget);
+            inputObject.widget = widget;
+        }
+        if(inputGroupIsMutuallyExclusive && inputValue.isNull() && widget != nullptr)
         {
             widget->hide();
         }
-        parentLayout->addWidget(widget);
     }
     for(auto& destinationLayout: destinationLayouts)
     {

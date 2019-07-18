@@ -161,7 +161,48 @@ void SearchToolsWidget::processFinished(int exitCode, QProcess::ExitStatus exitS
     }
     if(lines.size() < 2)
     {
-        return;
+        if(output.contains("Error"))
+        {
+            QMessageBox messageBox;
+            messageBox.setText("Error while searching tools in Zenodo database.");
+            messageBox.setInformativeText("Do you want to open fake search results?");
+            messageBox.setStandardButtons(QMessageBox::Ok | QMessageBox::No);
+            messageBox.setDefaultButton(QMessageBox::No);
+            int returnCode = messageBox.exec();
+            if(returnCode == QMessageBox::Ok)
+            {
+                QDir dataDirectory("../../data/");
+                QString fakeResultFileName = dataDirectory.absoluteFilePath("fakeSearchResult.txt");
+                QFile fakeResultFile(fakeResultFileName);
+                if (fakeResultFile.open(QIODevice::ReadOnly | QIODevice::Text))
+                {
+                    stringstream fakeOutputSream(fakeResultFile.readAll().toStdString());
+                    lines.clear();
+                    while (getline(fakeOutputSream, line))
+                    {
+                        lines.push_back(line);
+                    }
+                    if(lines.size() < 2)
+                    {
+                        QMessageBox::critical(this, "Error reading fake search result file", "Not result found.");
+                        return;
+                    }
+                }
+                else
+                {
+                    QMessageBox::critical(this, "Error reading fake search result file", "File not found.");
+                    return;
+                }
+            }
+            else
+            {
+                return;
+            }
+        }
+        else
+        {
+            return;
+        }
     }
 
     line = lines[1];
