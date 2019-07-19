@@ -13,6 +13,7 @@ class QJsonObject;
 class QDoubleSpinBox;
 class QRadioButton;
 class QComboBox;
+class QTimer;
 QT_END_NAMESPACE
 
 struct GroupObject {
@@ -39,6 +40,7 @@ private:
     QScrollArea *scrollArea;
     QWidget *group;
     QGroupBox *optionalInputGroup;
+    QTimer *emitInvocationChangedTimer;
     QJsonObject *invocationJSON;
     QJsonObject *completeInvocationJSON;
     map<string, InputObject> idToInputObject;
@@ -64,6 +66,7 @@ public slots:
 private slots:
     void optionalGroupChanged(bool on);
     void mutuallyExclusiveGroupChanged(GroupObject *groupObject, int itemIndex);
+    void emitInvocationChanged();
 };
 
 #endif // INVOCATIONGUIWIDGET_H

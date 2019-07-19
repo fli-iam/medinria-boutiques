@@ -2,12 +2,13 @@
 #include <QtWidgets>
 #include "invocationguiwidget.h"
 
-InvocationGUIWidget::InvocationGUIWidget(QWidget *parent, SearchToolsWidget *searchToolsWidget) : QWidget(parent), searchToolsWidget(searchToolsWidget)
+InvocationGUIWidget::InvocationGUIWidget(QWidget *parent, SearchToolsWidget *searchToolsWidget) :
+    QWidget(parent),
+    searchToolsWidget(searchToolsWidget),
+    optionalInputGroup(nullptr),
+    completeInvocationJSON(nullptr),
+    ignoreSignals(false)
 {
-    // this > layout > scrollArea >
-    this->optionalInputGroup = nullptr;
-    this->completeInvocationJSON = nullptr;
-    this->ignoreSignals = false;
     this->layout = new QVBoxLayout(this);
     this->setMinimumHeight(150);
     this->scrollArea = new QScrollArea(this);
@@ -18,6 +19,10 @@ InvocationGUIWidget::InvocationGUIWidget(QWidget *parent, SearchToolsWidget *sea
     this->layout->addWidget(this->scrollArea);
     this->group = nullptr;
     this->setLayout(this->layout);
+
+    this->emitInvocationChangedTimer = new QTimer();
+    this->emitInvocationChangedTimer->setSingleShot(true);
+    connect(this->emitInvocationChangedTimer, &QTimer::timeout, [this](){ emit invocationChanged();});
 }
 
 bool InvocationGUIWidget::inputGroupIsMutuallyExclusive(const string &inputId)
@@ -77,7 +82,7 @@ void InvocationGUIWidget::valueChanged(const string& inputId)
     {
         this->invocationJSON->insert(QString::fromStdString(inputId), value);
     }
-    emit invocationChanged();
+    this->emitInvocationChanged();
 }
 
 void InvocationGUIWidget::optionalGroupChanged(bool on)
@@ -127,7 +132,7 @@ void InvocationGUIWidget::optionalGroupChanged(bool on)
             }
         }
     }
-    emit invocationChanged();
+    this->emitInvocationChanged();
 }
 
 pair<QGroupBox *, QVBoxLayout *> InvocationGUIWidget::createGroupAndLayout(const string &name)
@@ -170,7 +175,13 @@ void InvocationGUIWidget::mutuallyExclusiveGroupChanged(GroupObject *groupObject
         this->invocationJSON->insert(inputId, QJsonValue(true));
     }
 
-    emit invocationChanged();
+    this->emitInvocationChanged();
+}
+
+void InvocationGUIWidget::emitInvocationChanged()
+{
+    this->emitInvocationChangedTimer->stop();
+    this->emitInvocationChangedTimer->start(500);
 }
 
 void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
@@ -358,7 +369,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                         {
                             this->invocationJSON->remove(inputId);
                         }
-                        emit invocationChanged();
+                        this->emitInvocationChanged();
                     } );
                 }
             }
@@ -369,18 +380,10 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
             }
         }
 
-        if(inputType == "File")
+        if(inputType == "String" || inputType == "Number" || inputType == "File")
         {
-            QPushButton *pushButton = new QPushButton("Select " + inputObject.description["name"].toString());
-            widget = pushButton;
-
-            inputObject.getValue = [this, inputName]() { return QJsonValue(QFileDialog::getOpenFileName(this, "Select " + inputName)); };
-            connect(pushButton, &QPushButton::clicked, [this, inputId]() { this->valueChanged(inputId); } );
-        }
-
-        if(inputType == "String" || inputType == "Number")
-        {
-            widget = new QGroupBox();
+//            widget = new QGroupBox();
+            widget = new QWidget();
             QHBoxLayout *layout = new QHBoxLayout();
             QLabel *label = new QLabel(inputName + ":");
             layout->addWidget(label);
@@ -399,20 +402,25 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 
                 inputObject.getValue = [this, lineEdit]() { return QJsonValue(this->stringToArray(lineEdit->text().toStdString())); };
                 connect(lineEdit, &QLineEdit::textChanged, [this, inputId](){ this->valueChanged(inputId); });
+
+                if(inputType == "File")
+                {
+                    // TODO?
+                }
             }
             else
             {
                 if(inputType == "String")
                 {
                     QLineEdit *lineEdit = new QLineEdit();
-                    subWidget = lineEdit;
                     lineEdit->setPlaceholderText(inputDescription);
                     lineEdit->setText(inputValue.toString());
 
                     inputObject.getValue = [lineEdit]() { return lineEdit->text(); };
                     connect(lineEdit, &QLineEdit::textChanged, [this, inputId](){ this->valueChanged(inputId); });
+                    layout->addWidget(lineEdit);
                 }
-                else
+                else if(inputType == "Number")
                 {
                     if(inputObject.description["integer"].toBool())
                     {
@@ -426,7 +434,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                         spinBox->setValue(static_cast<int>(inputValue.toDouble()));
                         inputObject.getValue = [spinBox](){ return QJsonValue(spinBox->value()); };
                         connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged), [this, inputId](){ this->valueChanged(inputId); });
-                        subWidget = spinBox;
+                        layout->addWidget(spinBox);
                     }
                     else
                     {
@@ -441,12 +449,27 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                         spinBox->setDecimals(4);
                         inputObject.getValue = [spinBox](){ return QJsonValue(spinBox->value()); };
                         connect(spinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, inputId](){ this->valueChanged(inputId); });
-                        subWidget = spinBox;
+                        layout->addWidget(spinBox);
                     }
+                }
+                else if(inputType == "File")
+                {
+                    QLineEdit *lineEdit = new QLineEdit();
+                    subWidget = lineEdit;
+                    lineEdit->setPlaceholderText(inputDescription);
+                    lineEdit->setText(inputValue.toString());
+
+                    inputObject.getValue = [lineEdit]() { return lineEdit->text(); };
+                    connect(lineEdit, &QLineEdit::textChanged, [this, inputId](){ this->valueChanged(inputId); });
+                    layout->addWidget(lineEdit);
+
+                    QPushButton *pushButton = new QPushButton("Select " + inputName);
+
+                    connect(pushButton, &QPushButton::clicked, [this, inputName, lineEdit]() { lineEdit->setText(QFileDialog::getOpenFileName(this, "Select " + inputName)); } );
+                    layout->addWidget(pushButton);
                 }
             }
             widget->setToolTip(inputDescription);
-            layout->addWidget(subWidget);
             widget->setLayout(layout);
         }
 
