@@ -29,6 +29,7 @@ struct InputObject {
     QWidget *widget = nullptr;
     GroupObject *group = nullptr;
     std::function<QJsonValue()> getValue;
+    InputObject(const QJsonObject &description): description(description) {}
 };
 
 class InvocationGUIWidget : public QWidget
@@ -49,6 +50,7 @@ private:
 
 public:
     explicit InvocationGUIWidget(QWidget *parent = nullptr, SearchToolsWidget *searchToolsWidget = nullptr);
+    ~InvocationGUIWidget();
     void parseDescriptor(QJsonObject *invocationJSON);
     bool generateCompleteInvocation();
 

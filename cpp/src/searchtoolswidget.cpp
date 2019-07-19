@@ -39,7 +39,7 @@ SearchToolsWidget::SearchToolsWidget(QWidget *parent) : QWidget(parent)
     connect(this->button, &QPushButton::clicked, this, &SearchToolsWidget::searchBoutiquesTools);
     connect(this->searchLineEdit, &QLineEdit::returnPressed, this, &SearchToolsWidget::searchBoutiquesTools);
 
-    this->createProcess();
+    this->createProcesses();
 }
 
 SearchResult *SearchToolsWidget::getSelectedTool()
@@ -62,12 +62,15 @@ void SearchToolsWidget::createTable()
     this->table->hide();
 }
 
-void SearchToolsWidget::createProcess()
+void SearchToolsWidget::createProcesses()
 {
-    this->process = new QProcess(this);
-    connect(this->process, &QProcess::errorOccurred, this, &SearchToolsWidget::errorOccurred);
-    connect(this->process, &QProcess::started, this, &SearchToolsWidget::processStarted);
-    connect(this->process, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::processFinished);
+    this->searchProcess = new QProcess(this);
+    connect(this->searchProcess, &QProcess::errorOccurred, this, &SearchToolsWidget::errorOccurred);
+    connect(this->searchProcess, &QProcess::started, this, &SearchToolsWidget::searchProcessStarted);
+    connect(this->searchProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::searchProcessFinished);
+
+    this->pprintProcess = new QProcess(this);
+    connect(this->pprintProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::pprintProcessFinished);
 }
 
 void SearchToolsWidget::selectionChanged()
@@ -77,13 +80,17 @@ void SearchToolsWidget::selectionChanged()
         return;
     }
 
-    QProcess bosh;
-    bosh.start(BOSH_PATH, {"pprint", tool->id.c_str()});
-    if (!bosh.waitForFinished()) {
-        return;
-    }
+    this->pprintProcess->kill();
+    this->pprintProcess->start(BOSH_PATH, {"pprint", tool->id.c_str()});
+    this->loadingLabel->setText("Getting tool help...");
+}
 
-    QByteArray result = bosh.readAll();
+void SearchToolsWidget::pprintProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    Q_UNUSED(exitCode)
+    Q_UNUSED(exitStatus)
+
+    QByteArray result = this->pprintProcess->readAll();
     this->info->setText(QString::fromUtf8(result));
 
     this->infoLabel->show();
@@ -100,8 +107,8 @@ void SearchToolsWidget::searchBoutiquesTools()
 
     QString searchQuery = this->searchLineEdit->text();
 
-    this->process->kill();
-    this->process->start(BOSH_PATH, {"search", "-m 50", searchQuery});
+    this->searchProcess->kill();
+    this->searchProcess->start(BOSH_PATH, {"search", "-m 50", searchQuery});
 
     this->loadingLabel->setText("Search launched...");
 
@@ -133,12 +140,12 @@ void SearchToolsWidget::errorOccurred(QProcess::ProcessError error)
     this->loadingLabel->setText("An error occurred while searching the tool.");
 }
 
-void SearchToolsWidget::processStarted()
+void SearchToolsWidget::searchProcessStarted()
 {
     this->loadingLabel->setText("Searching for tools...");
 }
 
-void SearchToolsWidget::processFinished(int exitCode, QProcess::ExitStatus exitStatus)
+void SearchToolsWidget::searchProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     Q_UNUSED(exitCode)
     Q_UNUSED(exitStatus)
@@ -146,7 +153,7 @@ void SearchToolsWidget::processFinished(int exitCode, QProcess::ExitStatus exitS
     this->loadingLabel->hide();
     this->table->show();
 
-    QString output = QString::fromUtf8(this->process->readAll());
+    QString output = QString::fromUtf8(this->searchProcess->readAll());
 
     regex e("\x1b\[[0-9;]*[mGKF]");
 

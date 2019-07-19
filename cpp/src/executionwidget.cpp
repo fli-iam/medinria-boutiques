@@ -26,10 +26,14 @@ ExecutionWidget::ExecutionWidget(QWidget *parent, SearchToolsWidget *searchTools
     connect(this->executeButton, &QPushButton::clicked, this, &ExecutionWidget::executeTool);
     connect(this->cancelButton, &QPushButton::clicked, this, &ExecutionWidget::cancelExecution);
 
-    this->process = new QProcess(this);
-    connect(this->process, &QProcess::readyRead, this, &ExecutionWidget::dataReady);
-    connect(this->process, &QProcess::started, this, &ExecutionWidget::processStarted);
-    connect(this->process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &ExecutionWidget::processFinished);
+    this->executionProcess = new QProcess(this);
+    connect(this->executionProcess, &QProcess::errorOccurred, this, &ExecutionWidget::errorOccurred);
+    connect(this->executionProcess, &QProcess::readyRead, this, &ExecutionWidget::dataReady);
+    connect(this->executionProcess, &QProcess::started, this, &ExecutionWidget::executionProcessStarted);
+    connect(this->executionProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &ExecutionWidget::executionProcessFinished);
+
+    this->simulationProcess = new QProcess(this);
+    connect(this->simulationProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &ExecutionWidget::simulationProcessFinished);
 
     this->setLayout(this->layout);
 }
@@ -58,14 +62,13 @@ void ExecutionWidget::invocationChanged()
     }
     QString temporaryInvocationFilePath = this->getTemporaryInvocationFile();
 
-    QProcess bosh;
-    bosh.start(BOSH_PATH, {"exec", "simulate", "-i", temporaryInvocationFilePath.toStdString().c_str(), tool->id.c_str()});
-    if (!bosh.waitForFinished())
-    {
-        return;
-    }
+    this->simulationProcess->kill();
+    this->simulationProcess->start(BOSH_PATH, {"exec", "simulate", "-i", temporaryInvocationFilePath.toStdString().c_str(), tool->id.c_str()});
+}
 
-    QString output = QString::fromUtf8(bosh.readAll());
+void ExecutionWidget::simulationProcessFinished()
+{
+    QString output = QString::fromUtf8(this->simulationProcess->readAll());
     this->generatedCommand->setText(output);
 }
 
@@ -80,13 +83,14 @@ void ExecutionWidget::executeTool()
 
     QString temporaryInvocationFilePath = this->getTemporaryInvocationFile();
 
-    this->process->start(BOSH_PATH, {"exec", "launch", "-s", tool->id.c_str(), temporaryInvocationFilePath.toStdString().c_str()});
+    this->executionProcess->kill();
+    this->executionProcess->start(BOSH_PATH, {"exec", "launch", "-s", tool->id.c_str(), temporaryInvocationFilePath.toStdString().c_str()});
     this->output->clear();
 }
 
 void ExecutionWidget::cancelExecution()
 {
-    this->process->kill();
+    this->executionProcess->kill();
     this->executeButton->show();
     this->cancelButton->show();
 }
@@ -99,14 +103,14 @@ void ExecutionWidget::print(const QString& text)
     this->output->ensureCursorVisible();
 }
 
-void ExecutionWidget::processStarted()
+void ExecutionWidget::executionProcessStarted()
 {
     this->print("Process started...\n\n");
     this->executeButton->hide();
     this->cancelButton->show();
 }
 
-void ExecutionWidget::processFinished()
+void ExecutionWidget::executionProcessFinished()
 {
     this->print("Process finished.");
     this->executeButton->show();
@@ -115,12 +119,18 @@ void ExecutionWidget::processFinished()
 
 void ExecutionWidget::dataReady()
 {
-    QString output = QString::fromUtf8(this->process->readAll());
+    QString output = QString::fromUtf8(this->executionProcess->readAll());
 
     regex e("\x1b\[[0-9;]*[mGKF]");
 
     string outputClean = regex_replace(output.toStdString(), e, "");
     this->print(QString::fromStdString(outputClean));
+}
+
+void ExecutionWidget::errorOccurred(QProcess::ProcessError error)
+{
+    Q_UNUSED(error)
+    this->print("An error occured during the process execution.\n\n");
 }
 
 void ExecutionWidget::toolSelected()

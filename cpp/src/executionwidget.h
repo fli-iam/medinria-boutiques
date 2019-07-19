@@ -20,7 +20,8 @@ public:
     QTextEdit *output;
     QPushButton *executeButton;
     QPushButton *cancelButton;
-    QProcess *process;
+    QProcess *executionProcess;
+    QProcess *simulationProcess;
 
 public:
     explicit ExecutionWidget(QWidget *parent = nullptr, SearchToolsWidget *searchToolsWidget = nullptr, InvocationWidget *invocationWidget = nullptr);
@@ -35,9 +36,11 @@ public slots:
     void invocationChanged();
     void executeTool();
     void cancelExecution();
+    void errorOccurred(QProcess::ProcessError error);
     void dataReady();
-    void processStarted();
-    void processFinished();
+    void executionProcessStarted();
+    void executionProcessFinished();
+    void simulationProcessFinished();
     void toolSelected();
     void toolDeselected();
 };

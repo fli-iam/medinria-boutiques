@@ -20,9 +20,17 @@ InvocationGUIWidget::InvocationGUIWidget(QWidget *parent, SearchToolsWidget *sea
     this->group = nullptr;
     this->setLayout(this->layout);
 
-    this->emitInvocationChangedTimer = new QTimer();
+    this->emitInvocationChangedTimer = new QTimer(this);
     this->emitInvocationChangedTimer->setSingleShot(true);
     connect(this->emitInvocationChangedTimer, &QTimer::timeout, [this](){ emit invocationChanged();});
+}
+
+InvocationGUIWidget::~InvocationGUIWidget()
+{
+    if(this->completeInvocationJSON != nullptr)
+    {
+        delete this->completeInvocationJSON;
+    }
 }
 
 bool InvocationGUIWidget::inputGroupIsMutuallyExclusive(const string &inputId)
@@ -48,11 +56,6 @@ void InvocationGUIWidget::removeMutuallyExclusiveParameters(const string &inputI
             for (int i=0 ; i<inputArray.size() ; ++i)
             {
                 const QString &member = inputArray[i].toString();
-                auto it = this->idToInputObject.find(member.toStdString());
-//                if(it != this->idToInputObject.end() && it->second.radioButton != nullptr)
-//                {
-//                    it->second.radioButton->setChecked(false);
-//                }
                 this->invocationJSON->remove(member);
             }
             this->ignoreSignals = false;
@@ -206,13 +209,22 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
     // if input group is mutually exclusive:
     //   The inputWidgets will be composed of a horizontal group (QWidget > QHBoxLayout) which then holds the inputWidget
 
+    if(this->completeInvocationJSON != nullptr)
+    {
+        delete this->completeInvocationJSON;
+        this->completeInvocationJSON = nullptr;
+    }
+
     this->invocationJSON = invocationJSON;
 
     if(this->group != nullptr)
     {
+        this->emitInvocationChangedTimer->stop();
+        connect(this->group, &QWidget::destroyed, [this](){ this->parseDescriptor(this->invocationJSON); });
         this->scrollArea->takeWidget();
         this->group->deleteLater();
         this->group = nullptr;
+        return;
     }
 
     this->group = new QWidget(this->scrollArea);
@@ -249,12 +261,21 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         return;
     }
 
+    this->idToInputObject.clear();
+
     QJsonArray inputArray = json["inputs"].toArray();
     for (int i = 0 ; i<inputArray.size() ; ++i)
     {
-        InputObject inputObject;
-        inputObject.description = inputArray[i].toObject();
-        this->idToInputObject.insert(pair<string, InputObject>(inputObject.description["id"].toString().toStdString(), inputObject));
+        const QJsonObject &description = inputArray[i].toObject();
+        const auto &result = this->idToInputObject.emplace(pair<string, InputObject>(description["id"].toString().toStdString(), InputObject(description)));
+        if(!result.second)
+        {
+            QMessageBox::warning(this, "Error in descriptor file", QString::fromStdString("Input " + result.first->first + "appears twice in descriptor, ignoring one of them..."));
+        }
+        else
+        {
+            result.first->second.description = description;
+        }
     }
 
     this->groupObjects.clear();
@@ -388,12 +409,10 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
             QLabel *label = new QLabel(inputName + ":");
             layout->addWidget(label);
 
-            QWidget *subWidget = nullptr;
             if(inputObject.description["list"].toBool())
             {
                 QLineEdit *lineEdit = new QLineEdit();
-                subWidget = lineEdit;
-                lineEdit->setPlaceholderText(QString("Comma separated ") + (inputType == "String" ? "strings" : "numbers") + ".");
+                lineEdit->setPlaceholderText(QString("Comma separated ") + (inputType == "String" ? "strings" : inputType == "Number" ? "numbers" : "file paths") + ".");
                 QString listString;
 
                 QJsonDocument valueList;
@@ -402,10 +421,14 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 
                 inputObject.getValue = [this, lineEdit]() { return QJsonValue(this->stringToArray(lineEdit->text().toStdString())); };
                 connect(lineEdit, &QLineEdit::textChanged, [this, inputId](){ this->valueChanged(inputId); });
+                layout->addWidget(lineEdit);
 
                 if(inputType == "File")
                 {
-                    // TODO?
+                    QPushButton *pushButton = new QPushButton("Select " + inputName);
+
+                    connect(pushButton, &QPushButton::clicked, [this, inputName, lineEdit]() { lineEdit->setText("\"" + QFileDialog::getOpenFileNames(this, "Select " + inputName).join("\", \"") + "\""); } );
+                    layout->addWidget(pushButton);
                 }
             }
             else
@@ -455,7 +478,6 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                 else if(inputType == "File")
                 {
                     QLineEdit *lineEdit = new QLineEdit();
-                    subWidget = lineEdit;
                     lineEdit->setPlaceholderText(inputDescription);
                     lineEdit->setText(inputValue.toString());
 

@@ -21,6 +21,7 @@ private:
     QPushButton *openInvocationButton;
     QPushButton *saveInvocationButton;
     QJsonObject invocationJSON;
+    QProcess *generateInvocationProcess;
 
 public:
     explicit InvocationWidget(QWidget *parent = nullptr, SearchToolsWidget *searchToolsWidget = nullptr);
@@ -31,6 +32,7 @@ private:
 signals:
 
 public slots:
+    void generateInvocationProcessFinished();
     void openInvocationFile();
     void saveInvocationFile();
     void invocationChanged();

@@ -37,7 +37,7 @@ public:
 
 private:
     void createTable();
-    void createProcess();
+    void createProcesses();
 
 signals:
     void toolSelected();
@@ -47,8 +47,9 @@ public slots:
     void selectionChanged();
     void searchBoutiquesTools();
     void errorOccurred(QProcess::ProcessError error);
-    void processStarted();
-    void processFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void searchProcessStarted();
+    void searchProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void pprintProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
 
 private:
     QLineEdit* searchLineEdit;
@@ -58,7 +59,8 @@ private:
     QTableWidget* table;
     QLabel* infoLabel;
     QTextEdit* info;
-    QProcess* process;
+    QProcess* searchProcess;
+    QProcess* pprintProcess;
     std::vector<SearchResult> searchResults;
 };
 

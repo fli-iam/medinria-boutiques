@@ -22,6 +22,9 @@ InvocationWidget::InvocationWidget(QWidget *parent, SearchToolsWidget *searchToo
     connect(this->invocationGUIWidget, &InvocationGUIWidget::invocationChanged, this, &InvocationWidget::invocationChanged);
 
     this->setLayout(this->layout);
+
+    this->generateInvocationProcess = new QProcess(this);
+    connect(this->generateInvocationProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &InvocationWidget::generateInvocationProcessFinished);
 }
 
 void InvocationWidget::generateInvocationFile()
@@ -32,21 +35,22 @@ void InvocationWidget::generateInvocationFile()
         return;
     }
 
-    QProcess bosh;
     QStringList args({"example"});
     if(this->invocationGUIWidget->generateCompleteInvocation())
     {
         args.append("--complete");
     }
     args.append(tool->id.c_str());
-    bosh.start(BOSH_PATH, args);
-    if (!bosh.waitForFinished()) {
-        return;
-    }
+    this->generateInvocationProcess->kill();
+    this->generateInvocationProcess->start(BOSH_PATH, args);
+}
 
-    QByteArray result = bosh.readAll();
+void InvocationWidget::generateInvocationProcessFinished()
+{
+    QByteArray result = this->generateInvocationProcess->readAll();
     this->invocationJSON = QJsonDocument::fromJson(result).object();
     this->invocationEditor->setText(QString::fromUtf8(result));
+    this->invocationGUIWidget->parseDescriptor(&this->invocationJSON);
 }
 
 void InvocationWidget::openInvocationFile()
@@ -83,7 +87,6 @@ void InvocationWidget::toolSelected()
 {
     this->show();
     this->generateInvocationFile();
-    this->invocationGUIWidget->parseDescriptor(&this->invocationJSON);
 }
 
 void InvocationWidget::toolDeselected()
