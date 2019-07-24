@@ -16,13 +16,19 @@ MainWindow::MainWindow(QWidget *parent)
     connect(this->searchToolsWidget, &SearchToolsWidget::toolDeselected, this->invocationWidget, &InvocationWidget::toolDeselected);
     connect(this->searchToolsWidget, &SearchToolsWidget::toolDeselected, this->executionWidget, &ExecutionWidget::toolDeselected);
 
-    this->centralWidget = new QWidget();
-    this->layout = new QVBoxLayout();
-    this->layout->addWidget(this->searchToolsWidget);
-    this->layout->addWidget(this->invocationWidget);
-    this->layout->addWidget(this->executionWidget);
-    this->centralWidget->setLayout(this->layout);
-    this->setCentralWidget(centralWidget);
+    QVBoxLayout *scrollAreaLayout = new QVBoxLayout();
+    scrollAreaLayout->addWidget(this->searchToolsWidget);
+    scrollAreaLayout->addWidget(this->invocationWidget);
+    scrollAreaLayout->addWidget(this->executionWidget);
+
+    QScrollArea *scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setSizePolicy(QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Preferred);
+    QWidget *scrollAreaWidget = new QWidget();
+    scrollAreaWidget->setLayout(scrollAreaLayout);
+    scrollArea->setWidget(scrollAreaWidget);
+
+    this->setCentralWidget(scrollArea);
 }
 
 MainWindow::~MainWindow()

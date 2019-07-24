@@ -15,6 +15,7 @@ ExecutionWidget::ExecutionWidget(QWidget *parent, SearchToolsWidget *searchTools
     this->cancelButton->hide();
 
     this->output = new QTextEdit();
+    this->output->setMinimumHeight(300);
     this->output->setReadOnly(true);
 
     this->layout->addWidget(this->generatedCommandLabel);

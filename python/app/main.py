@@ -37,6 +37,7 @@ class SearchToolsWidget(QtWidgets.QWidget):
 		self.infoLabel = QtWidgets.QLabel("Tool Info")
 		self.infoLabel.hide()
 		self.info = QtWidgets.QTextEdit()
+		self.info.setMinimumHeight(300)
 		self.info.setReadOnly(True)
 		self.info.hide()
 
@@ -145,7 +146,7 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 
 		self.layout = QtWidgets.QVBoxLayout()
 		
-		self.setMinimumHeight(150)
+		self.setMinimumHeight(500)
 		# self.rootWidget.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Preferred)
 		# self.rootWidget.setHorizontalPolicy(QtWidgets.QSizePolicy.GrowFlag) # not working: no setHorizontalPolicy on a widget, only for layouts
 
@@ -200,6 +201,9 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 		group.setLayout(groupLayout)
 		return (group, groupLayout)
 
+	def optionalGroupChanged(self, on):
+		return
+
 	def parseDescriptor(self, invocationJSON):
 
 		self.invocationJSON = invocationJSON
@@ -234,6 +238,9 @@ class InvocationGUIWidget(QtWidgets.QWidget):
 
 			(mainInputsGroup, mainInputsLayout) = self.createGroupAndLayout("Main parameters")
 			(optionalInputsGroup, optionalInputsLayout) = self.createGroupAndLayout("Optional parameters")
+
+			optionalInputsGroup.setCheckable(True)
+			optionalInputsGroup.toggled.connect(self.optionalGroupChanged)
 
 			# id =>
 			#	description:  
@@ -411,7 +418,7 @@ class InvocationWidget(QtWidgets.QWidget):
 		self.openInvocationButton = QtWidgets.QPushButton("Open invocation file")
 
 		self.invocationEditor = QtWidgets.QTextEdit()
-		self.invocationEditor.setMinimumHeight(150)
+		self.invocationEditor.setMinimumHeight(300)
 		self.saveInvocationButton = QtWidgets.QPushButton("Save invocation file")
 
 		self.layout.addWidget(self.openInvocationButton)
@@ -592,11 +599,31 @@ class BoutiquesGUI(QtWidgets.QWidget):
 		self.searchToolsWidget.toolDeselected.connect(self.invocationWidget.toolDeselected)
 		self.searchToolsWidget.toolDeselected.connect(self.executionWidget.toolDeselected)
 
-		self.layout = QtWidgets.QVBoxLayout()
-		self.layout.addWidget(self.searchToolsWidget)
-		self.layout.addWidget(self.invocationWidget)
-		self.layout.addWidget(self.executionWidget)
+		self.scrollAreaLayout = QtWidgets.QVBoxLayout()
+		self.scrollAreaLayout.addWidget(self.searchToolsWidget)
+		self.scrollAreaLayout.addWidget(self.invocationWidget)
+		self.scrollAreaLayout.addWidget(self.executionWidget)
 
+
+
+
+		self.scrollArea = QtWidgets.QScrollArea(self)
+		self.scrollArea.setVerticalScrollBarPolicy( Qt.ScrollBarAlwaysOn )
+		self.scrollArea.setWidgetResizable( True )
+		# self.scrollArea.setGeometry(0, 0, 800, 400 )
+		# self.scrollArea.setMinimumHeight(300)
+		self.scrollArea.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Preferred)
+
+
+		self.scrollAreaWidget = QtWidgets.QWidget()
+		# self.group.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Maximum)
+		# self.group.setMinimumSize(800, 400)
+		self.scrollAreaWidget.setLayout(self.scrollAreaLayout)
+		self.scrollArea.setWidget(self.scrollAreaWidget)
+
+
+		self.layout = QtWidgets.QVBoxLayout()
+		self.layout.addWidget(self.scrollArea)
 		self.setLayout(self.layout)
 
 

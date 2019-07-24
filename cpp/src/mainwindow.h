@@ -14,7 +14,7 @@ public:
     InvocationWidget *invocationWidget;
     ExecutionWidget *executionWidget;
     QWidget *centralWidget;
-    QLayout *layout;
+//    QLayout *layout;
 
 private:
 

@@ -60,6 +60,7 @@ private:
     void valueChanged(const string &inputId);
     void removeMutuallyExclusiveParameters(const string &inputId);
     QJsonArray stringToArray(const string &string);
+    QWidget *createUnsetGroup(const string &inputId, QWidget *widget);
 
 signals:
     void invocationChanged();

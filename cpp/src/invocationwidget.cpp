@@ -9,7 +9,7 @@ InvocationWidget::InvocationWidget(QWidget *parent, SearchToolsWidget *searchToo
     this->openInvocationButton = new QPushButton("Open invocation file");
 
     this->invocationEditor = new QTextEdit();
-    this->invocationEditor->setMinimumHeight(150);
+    this->invocationEditor->setMinimumHeight(300);
     this->saveInvocationButton = new QPushButton("Save invocation file");
 
     this->layout->addWidget(this->openInvocationButton);

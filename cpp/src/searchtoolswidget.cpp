@@ -25,6 +25,7 @@ SearchToolsWidget::SearchToolsWidget(QWidget *parent) : QWidget(parent)
     this->infoLabel = new QLabel("Tool info");
     this->infoLabel->hide();
     this->info = new QTextEdit();
+    this->info->setMinimumHeight(300);
     this->info->setReadOnly(true);
     this->info->hide();
 
@@ -51,6 +52,7 @@ SearchResult *SearchToolsWidget::getSelectedTool()
 void SearchToolsWidget::createTable()
 {
     this->table = new QTableWidget();
+    this->table->setMinimumHeight(150);
     this->table->setRowCount(0);
     this->table->setColumnCount(4);
     this->table->move(0, 0);

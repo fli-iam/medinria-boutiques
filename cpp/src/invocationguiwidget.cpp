@@ -10,9 +10,9 @@ InvocationGUIWidget::InvocationGUIWidget(QWidget *parent, SearchToolsWidget *sea
     ignoreSignals(false)
 {
     this->layout = new QVBoxLayout(this);
-    this->setMinimumHeight(150);
+    this->setMinimumHeight(500);
     this->scrollArea = new QScrollArea(this);
-    this->scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+//    this->scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     this->scrollArea->setWidgetResizable(true);
     this->scrollArea->setSizePolicy(QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Preferred);
 
@@ -77,7 +77,12 @@ void InvocationGUIWidget::valueChanged(const string& inputId)
     }
     const InputObject &inputObject = this->idToInputObject.at(inputId);
     const QJsonValue &value = inputObject.getValue();
-    if(inputObject.description["list"].toBool() && (!value.isArray() || value.toArray().isEmpty()) )
+    const QString &inputType = inputObject.description["type"].toString();
+    bool inputIsList = inputObject.description["list"].toBool();
+    bool inputIsStringButValueIsNullOrEmpty = inputType == "String" && !inputIsList && ( value.toString().isEmpty() || value.toString().isNull() );
+    bool inputIsListButValueIsInvalidOrEmpty = inputIsList && (!value.isArray() || value.toArray().isEmpty());
+    bool removeInputFromInvocation = inputIsStringButValueIsNullOrEmpty || inputIsListButValueIsInvalidOrEmpty;
+    if(removeInputFromInvocation)
     {
         this->invocationJSON->remove(QString::fromStdString(inputId));
     }
@@ -184,7 +189,23 @@ void InvocationGUIWidget::mutuallyExclusiveGroupChanged(GroupObject *groupObject
 void InvocationGUIWidget::emitInvocationChanged()
 {
     this->emitInvocationChangedTimer->stop();
-    this->emitInvocationChangedTimer->start(500);
+    this->emitInvocationChangedTimer->start(250);
+}
+
+QWidget *InvocationGUIWidget::createUnsetGroup(const string &inputId, QWidget *widget)
+{
+    QHBoxLayout *hLayout = new QHBoxLayout();
+    QWidget *hGroup = new QWidget();
+    QPushButton *unsetPushButton = new QPushButton("Unset");
+    unsetPushButton->setMaximumWidth(60);
+    connect(unsetPushButton, &QPushButton::clicked, [this, inputId]() {
+        this->invocationJSON->remove(QString::fromStdString(inputId));
+        this->emitInvocationChanged();
+    } );
+    hGroup->setLayout(hLayout);
+    hLayout->addWidget(widget);
+    hLayout->addWidget(unsetPushButton);
+    return hGroup;
 }
 
 void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
@@ -320,6 +341,12 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         InputObject &inputObject = idAndInputObject.second;
         GroupObject *groupObject = inputObject.group;
 
+        const QString &inputName = inputObject.description["name"].toString();
+        const QString &inputType = inputObject.description["type"].toString();
+        const QString &inputDescription = inputObject.description["description"].toString();
+        const QJsonValue &inputValue = this->invocationJSON->value(QString::fromStdString(inputId));
+        bool inputIsOptional = inputObject.description["optional"].toBool();
+
         QWidget *widget = nullptr;
         QLayout *parentLayout = nullptr;
 
@@ -327,7 +354,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         {
             parentLayout = groupObject->layout;
         }
-        else if(inputObject.description["optional"].toBool())
+        else if(inputIsOptional)
         {
             parentLayout = optionalInputsGroupAndLayout.second;
         }
@@ -335,11 +362,6 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         {
             parentLayout = mainInputsGroupAndLayout.second;
         }
-
-        const QString &inputName = inputObject.description["name"].toString();
-        const QString &inputType = inputObject.description["type"].toString();
-        const QString &inputDescription = inputObject.description["description"].toString();
-        const QJsonValue &inputValue = this->invocationJSON->value(QString::fromStdString(inputId));
 
         bool inputGroupIsMutuallyExclusive = this->inputGroupIsMutuallyExclusive(inputId);
 
@@ -374,7 +396,6 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
             {
                 QComboBox *comboBox = new QComboBox();
                 groupObject->comboBox = comboBox;
-                parentLayout->addWidget(comboBox);
                 connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [this, groupObject](int itemIndex) { this->mutuallyExclusiveGroupChanged(groupObject, itemIndex); } );
                 if(groupObject->optional)
                 {
@@ -392,6 +413,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                         }
                         this->emitInvocationChanged();
                     } );
+                    parentLayout->addWidget(comboBox);
                 }
             }
             groupObject->comboBox->addItem(inputName, QVariant(QString::fromStdString(inputId)));
@@ -425,7 +447,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 
                 if(inputType == "File")
                 {
-                    QPushButton *pushButton = new QPushButton("Select " + inputName);
+                    QPushButton *pushButton = new QPushButton("Select files");
 
                     connect(pushButton, &QPushButton::clicked, [this, inputName, lineEdit]() { lineEdit->setText("\"" + QFileDialog::getOpenFileNames(this, "Select " + inputName).join("\", \"") + "\""); } );
                     layout->addWidget(pushButton);
@@ -433,7 +455,28 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
             }
             else
             {
-                if(inputType == "String")
+                if( (inputType == "String" || inputType == "Number") && inputObject.description.contains("value-choices") && inputObject.description["value-choices"].isArray()  && inputObject.description["value-choices"].toArray().size() > 0)
+                {
+                    const QJsonArray &choices = inputObject.description["value-choices"].toArray();
+                    QComboBox *comboBox = new QComboBox();
+                    layout->addWidget(comboBox);
+                    connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [this, inputId](){ this->valueChanged(inputId); });
+                    inputObject.getValue = [comboBox]() { return comboBox->currentText(); };
+                    bool anItemIsEmpty = false;
+                    for(const auto &choice: choices)
+                    {
+                        anItemIsEmpty |= choice.toString().isEmpty();
+                    }
+                    if(inputIsOptional && !anItemIsEmpty)
+                    {
+                        comboBox->addItem("");
+                    }
+                    for(const auto &choice: choices)
+                    {
+                        comboBox->addItem(choice.toString());
+                    }
+                }
+                else if(inputType == "String")
                 {
                     QLineEdit *lineEdit = new QLineEdit();
                     lineEdit->setPlaceholderText(inputDescription);
@@ -485,7 +528,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                     connect(lineEdit, &QLineEdit::textChanged, [this, inputId](){ this->valueChanged(inputId); });
                     layout->addWidget(lineEdit);
 
-                    QPushButton *pushButton = new QPushButton("Select " + inputName);
+                    QPushButton *pushButton = new QPushButton("Select file");
 
                     connect(pushButton, &QPushButton::clicked, [this, inputName, lineEdit]() { lineEdit->setText(QFileDialog::getOpenFileName(this, "Select " + inputName)); } );
                     layout->addWidget(pushButton);
@@ -508,12 +551,20 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                 widget = checkBox;
             }
         }
+        bool inputCanBeUnset = !inputGroupIsMutuallyExclusive && inputIsOptional;
+        bool isFlagInMutuallyExclusiveGroup = inputType == "Flag" && inputGroupIsMutuallyExclusive;
 
-        if(!inputGroupIsMutuallyExclusive || inputType != "Flag")
+        if(inputCanBeUnset)
+        {
+            widget = this->createUnsetGroup(inputId, widget);
+        }
+
+        if(!isFlagInMutuallyExclusiveGroup)     // Then we must add it
         {
             parentLayout->addWidget(widget);
             inputObject.widget = widget;
         }
+
         if(inputGroupIsMutuallyExclusive && inputValue.isNull() && widget != nullptr)
         {
             widget->hide();
