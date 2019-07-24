@@ -299,6 +299,8 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         }
     }
 
+    this->outputFiles = json["output-files"].toArray();
+
     this->groupObjects.clear();
     vector<pair<QGroupBox*, QVBoxLayout*>> destinationLayouts;
     QJsonArray groupArray = json["groups"].toArray();
@@ -581,4 +583,75 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 bool InvocationGUIWidget::generateCompleteInvocation()
 {
     return this->optionalInputGroup != nullptr && this->optionalInputGroup->isChecked();
+}
+
+void InvocationGUIWidget::populateInputFilePaths(const QJsonObject::iterator &input, QStringList &filePaths)
+{
+    const QString &inputId = input.key();
+    const QJsonValue &value = input.value();
+
+    auto it = this->idToInputObject.find(inputId.toStdString());
+    if(it == this->idToInputObject.end())
+    {
+        return;
+    }
+    const InputObject &inputObject = it->second;
+    auto addFile = [](const QString &fileName, QStringList &filePaths){
+        if(QFileInfo::exists(fileName))
+        {
+            const QString &absolutePath = QDir(fileName).absolutePath();
+            if(!filePaths.contains(absolutePath))
+            {
+                filePaths.append(absolutePath);
+            }
+        }
+    };
+    if(inputObject.description["type"].toString() == "File")
+    {
+        if(inputObject.description["list"].toBool())
+        {
+            const QJsonArray &paths = value.toArray();
+            for(auto path: paths)
+            {
+                addFile(path.toString(), filePaths);
+            }
+        }
+        else
+        {
+            addFile(value.toString(), filePaths);
+        }
+    }
+}
+
+void InvocationGUIWidget::populateOutputFilePaths(const QJsonObject &invocationJSON, QStringList &filePaths)
+{
+
+    for (auto& idAndInputObject: idToInputObject)
+    {
+        const string &inputId = idAndInputObject.first;
+        InputObject &inputObject = idAndInputObject.second;
+
+        for (int i = 0 ; i<this->outputFiles.size() ; ++i)
+        {
+            const QJsonObject &outputFilesDescription = this->outputFiles[i].toObject();
+            QString pathTemplate = outputFilesDescription["path-template"].toString();
+            QString fileName = invocationJSON[QString::fromStdString(inputId)].toString();
+            if(inputObject.description["type"].toString() == "File" && outputFilesDescription.contains("path-template-stripped-extensions"))
+            {
+                const QJsonArray &pathTemplateStrippedExtensions = outputFilesDescription["path-template-stripped-extensions"].toArray();
+
+                for (int j = 0 ; j<pathTemplateStrippedExtensions.size() ; ++j)
+                {
+                    const QString &pathTemplateStrippedExtension = pathTemplateStrippedExtensions[j].toString();
+                    fileName.remove(pathTemplateStrippedExtension);
+                }
+            }
+            pathTemplate.replace(inputObject.description["value-key"].toString(), fileName);
+            const QString &absolutePath = QDir(pathTemplate).absolutePath();
+            if(!filePaths.contains(absolutePath))
+            {
+                filePaths.append(absolutePath);
+            }
+        }
+    }
 }

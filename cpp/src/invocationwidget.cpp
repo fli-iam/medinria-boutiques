@@ -27,6 +27,19 @@ InvocationWidget::InvocationWidget(QWidget *parent, SearchToolsWidget *searchToo
     connect(this->generateInvocationProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &InvocationWidget::generateInvocationProcessFinished);
 }
 
+QStringList InvocationWidget::getFilePaths()
+{
+    QStringList filePaths;
+    QString invocationString = this->invocationEditor->toPlainText();
+    QJsonObject invocationJSON = QJsonDocument::fromJson(invocationString.toUtf8()).object();
+    for(auto it = invocationJSON.begin() ; it != invocationJSON.end() ; it++)
+    {
+        this->invocationGUIWidget->populateInputFilePaths(it, filePaths);
+    }
+    this->invocationGUIWidget->populateOutputFilePaths(invocationJSON, filePaths);
+    return filePaths;
+}
+
 void InvocationWidget::generateInvocationFile()
 {
     const SearchResult* tool = this->searchToolsWidget->getSelectedTool();

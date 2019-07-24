@@ -25,6 +25,7 @@ private:
 
 public:
     explicit InvocationWidget(QWidget *parent = nullptr, SearchToolsWidget *searchToolsWidget = nullptr);
+    QStringList getFilePaths();
 
 private:
     void generateInvocationFile();

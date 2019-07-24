@@ -5,6 +5,7 @@
 #include <functional>
 #include <QWidget>
 #include <QJsonObject>
+#include <QJsonArray>
 #include "searchtoolswidget.h"
 
 QT_BEGIN_NAMESPACE
@@ -44,6 +45,7 @@ private:
     QTimer *emitInvocationChangedTimer;
     QJsonObject *invocationJSON;
     QJsonObject *completeInvocationJSON;
+    QJsonArray outputFiles;
     map<string, InputObject> idToInputObject;
     vector<GroupObject> groupObjects;
     bool ignoreSignals;
@@ -53,6 +55,8 @@ public:
     ~InvocationGUIWidget();
     void parseDescriptor(QJsonObject *invocationJSON);
     bool generateCompleteInvocation();
+    void populateInputFilePaths(const QJsonObject::iterator &input, QStringList &filePaths);
+    void populateOutputFilePaths(const QJsonObject &invocationJSON, QStringList &filePaths);
 
 private:
     bool inputGroupIsMutuallyExclusive(const string &inputId);

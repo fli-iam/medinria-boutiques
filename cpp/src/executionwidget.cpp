@@ -85,7 +85,16 @@ void ExecutionWidget::executeTool()
     QString temporaryInvocationFilePath = this->getTemporaryInvocationFile();
 
     this->executionProcess->kill();
-    this->executionProcess->start(BOSH_PATH, {"exec", "launch", "-s", tool->id.c_str(), temporaryInvocationFilePath.toStdString().c_str()});
+    QStringList args({"exec", "launch", "-s", tool->id.c_str(), temporaryInvocationFilePath.toStdString().c_str()});
+
+    const QStringList &filePaths = this->invocationWidget->getFilePaths();
+    for(const QString &filePath: filePaths)
+    {
+        args.push_back("-v");
+        args.push_back(filePath + ":" + filePath);
+    }
+    this->executionProcess->kill();
+    this->executionProcess->start(BOSH_PATH, args);
     this->output->clear();
 }
 
