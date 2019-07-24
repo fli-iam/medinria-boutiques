@@ -396,6 +396,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
             {
                 QComboBox *comboBox = new QComboBox();
                 groupObject->comboBox = comboBox;
+                parentLayout->addWidget(comboBox);
                 connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [this, groupObject](int itemIndex) { this->mutuallyExclusiveGroupChanged(groupObject, itemIndex); } );
                 if(groupObject->optional)
                 {
@@ -413,7 +414,6 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                         }
                         this->emitInvocationChanged();
                     } );
-                    parentLayout->addWidget(comboBox);
                 }
             }
             groupObject->comboBox->addItem(inputName, QVariant(QString::fromStdString(inputId)));
