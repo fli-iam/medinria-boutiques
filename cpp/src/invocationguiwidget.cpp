@@ -16,6 +16,7 @@ InvocationGUIWidget::InvocationGUIWidget(QWidget *parent, SearchToolsWidget *sea
     this->scrollArea->setWidgetResizable(true);
     this->scrollArea->setSizePolicy(QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Preferred);
 
+    this->createSelectCurrentDirectoryGUI();
     this->layout->addWidget(this->scrollArea);
     this->group = nullptr;
     this->setLayout(this->layout);
@@ -31,6 +32,33 @@ InvocationGUIWidget::~InvocationGUIWidget()
     {
         delete this->completeInvocationJSON;
     }
+}
+
+void InvocationGUIWidget::createSelectCurrentDirectoryGUI()
+{
+    this->selectCurrentDirectoryGroupBox = new QGroupBox();
+    selectCurrentDirectoryGroupBox->setTitle("Set root directory for all relative input and output file paths");
+    selectCurrentDirectoryGroupBox->setCheckable(true);
+    selectCurrentDirectoryGroupBox->setChecked(false);
+    selectCurrentDirectoryGroupBox->setSizePolicy(QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Maximum);
+
+    QLabel *label = new QLabel("Current working directory:");
+
+    this->selectCurrentDirectoryLineEdit = new QLineEdit();
+    selectCurrentDirectoryLineEdit->setPlaceholderText("/Path/To/Current/Working/Directory/ (default is " + QDir::homePath() + ")");
+    selectCurrentDirectoryLineEdit->setText(QDir::homePath());
+
+    QPushButton *pushButton = new QPushButton("Select current directory");
+
+    connect(pushButton, &QPushButton::clicked, [this]() { this->selectCurrentDirectoryLineEdit->setText(QFileDialog::getExistingDirectory(this, "Set current working directory")); } );
+
+    QHBoxLayout *hLayout = new QHBoxLayout();
+    hLayout->addWidget(label);
+    hLayout->addWidget(selectCurrentDirectoryLineEdit);
+    hLayout->addWidget(pushButton);
+    selectCurrentDirectoryGroupBox->setLayout(hLayout);
+
+    this->layout->addWidget(selectCurrentDirectoryGroupBox);
 }
 
 bool InvocationGUIWidget::inputGroupIsMutuallyExclusive(const string &inputId)
@@ -77,11 +105,11 @@ void InvocationGUIWidget::valueChanged(const string& inputId)
     }
     const InputObject &inputObject = this->idToInputObject.at(inputId);
     const QJsonValue &value = inputObject.getValue();
-    const QString &inputType = inputObject.description["type"].toString();
+//    const QString &inputType = inputObject.description["type"].toString();
     bool inputIsList = inputObject.description["list"].toBool();
-    bool inputIsStringButValueIsNullOrEmpty = inputType == "String" && !inputIsList && ( value.toString().isEmpty() || value.toString().isNull() );
+//    bool inputIsStringButValueIsNullOrEmpty = inputType == "String" && !inputIsList && ( value.toString().isEmpty() || value.toString().isNull() );
     bool inputIsListButValueIsInvalidOrEmpty = inputIsList && (!value.isArray() || value.toArray().isEmpty());
-    bool removeInputFromInvocation = inputIsStringButValueIsNullOrEmpty || inputIsListButValueIsInvalidOrEmpty;
+    bool removeInputFromInvocation = inputIsListButValueIsInvalidOrEmpty;
     if(removeInputFromInvocation)
     {
         this->invocationJSON->remove(QString::fromStdString(inputId));
@@ -496,8 +524,14 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                         if(inputObject.description["minimum"].isDouble()) {
                             spinBox->setMinimum(static_cast<int>(inputObject.description["minimum"].toDouble()));
                         }
+                        if(inputObject.description["exclusive-minimum"].isDouble()) {
+                            spinBox->setMinimum(static_cast<int>(inputObject.description["exclusive-minimum"].toDouble()) + 1);
+                        }
                         if(inputObject.description["maximum"].isDouble()) {
                             spinBox->setMaximum(static_cast<int>(inputObject.description["maximum"].toDouble()));
+                        }
+                        if(inputObject.description["exclusive-maximum"].isDouble()) {
+                            spinBox->setMaximum(static_cast<int>(inputObject.description["exclusive-maximum"].toDouble()) - 1);
                         }
                         spinBox->setValue(static_cast<int>(inputValue.toDouble()));
                         inputObject.getValue = [spinBox](){ return QJsonValue(spinBox->value()); };
@@ -510,8 +544,14 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                         if(inputObject.description["minimum"].isDouble()) {
                             spinBox->setMinimum(inputObject.description["minimum"].toDouble());
                         }
+                        if(inputObject.description["exclusive-minimum"].isDouble()) {
+                            spinBox->setMinimum(inputObject.description["exclusive-minimum"].toDouble() + 0.0001);
+                        }
                         if(inputObject.description["maximum"].isDouble()) {
                             spinBox->setMaximum(inputObject.description["maximum"].toDouble());
+                        }
+                        if(inputObject.description["exclusive-maximum"].isDouble()) {
+                            spinBox->setMaximum(inputObject.description["exclusive-maximum"].toDouble() - 0.0001);
                         }
                         spinBox->setValue(inputValue.toDouble());
                         spinBox->setDecimals(4);
@@ -585,72 +625,142 @@ bool InvocationGUIWidget::generateCompleteInvocation()
     return this->optionalInputGroup != nullptr && this->optionalInputGroup->isChecked();
 }
 
-void InvocationGUIWidget::populateInputFilePaths(const QJsonObject::iterator &input, QStringList &filePaths)
+void InvocationGUIWidget::populateDirectories(QJsonObject &invocationJSON, QStringList &directories)
 {
-    const QString &inputId = input.key();
-    const QJsonValue &value = input.value();
+    QDir::setCurrent(QDir::homePath());
 
-    auto it = this->idToInputObject.find(inputId.toStdString());
-    if(it == this->idToInputObject.end())
+    bool hasChangedCurrentDirectory = this->selectCurrentDirectoryGroupBox->isChecked();
+    if(hasChangedCurrentDirectory)
     {
-        return;
-    }
-    const InputObject &inputObject = it->second;
-    auto addFile = [](const QString &fileName, QStringList &filePaths){
-        if(QFileInfo::exists(fileName))
+        const QString &newCurrentPath = this->selectCurrentDirectoryLineEdit->text();
+        if(QDir(newCurrentPath).exists())
         {
-            const QString &absolutePath = QDir(fileName).absolutePath();
-            if(!filePaths.contains(absolutePath))
-            {
-                filePaths.append(absolutePath);
-            }
-        }
-    };
-    if(inputObject.description["type"].toString() == "File")
-    {
-        if(inputObject.description["list"].toBool())
-        {
-            const QJsonArray &paths = value.toArray();
-            for(auto path: paths)
-            {
-                addFile(path.toString(), filePaths);
-            }
+            QDir::setCurrent(newCurrentPath);
         }
         else
         {
-            addFile(value.toString(), filePaths);
+            QMessageBox::warning(this, "Could not set current working directory", "Could not set current working directory to \"" + newCurrentPath + "\".\n\nThe current directory is \"" + QDir::currentPath() + "\".\n\nYou will be asked to choose another one if needed.");
+            hasChangedCurrentDirectory = false;
         }
+    }
+    this->populateInputDirectories(invocationJSON, directories, hasChangedCurrentDirectory);
+    this->populateOutputDirectories(invocationJSON, directories, hasChangedCurrentDirectory);
+}
+
+void InvocationGUIWidget::askChangeCurrentDirectory()
+{
+    QString currentPath = QDir::currentPath();
+    QMessageBox messageBox;
+    messageBox.setText("One or more file paths are relative");
+    messageBox.setInformativeText("One or more file paths are relative, do you want to change the current working directory?\n\nThe current working directory is \"" + currentPath + "\".");
+    messageBox.setStandardButtons(QMessageBox::Ok | QMessageBox::No);
+    messageBox.setDefaultButton(QMessageBox::Ok);
+    int returnCode = messageBox.exec();
+    if(returnCode == QMessageBox::Ok)
+    {
+        const QString &newCurrentPath = QFileDialog::getExistingDirectory(this, tr("Select root directory"), QDir::home().absolutePath(), QFileDialog::ShowDirsOnly);
+        QDir::setCurrent(newCurrentPath);
     }
 }
 
-void InvocationGUIWidget::populateOutputFilePaths(const QJsonObject &invocationJSON, QStringList &filePaths)
+void InvocationGUIWidget::populateAbsolutePath(const QJsonValue &fileName, QStringList &directories, bool &hasChangedCurrentDirectory)
 {
+    QFileInfo fileInfo(fileName.toString());
+    if(fileInfo.isRelative())
+    {
+        if(!hasChangedCurrentDirectory)
+        {
+            this->askChangeCurrentDirectory();
+            hasChangedCurrentDirectory = true;
+        }
+        return;
+    }
+    const QString &path = fileInfo.absolutePath();
+    if(!directories.contains(path))
+    {
+        directories.append(path);
+    }
+}
 
+void InvocationGUIWidget::populateInputDirectories(const QJsonObject &invocationJSON, QStringList &directories, bool &hasChangedCurrentDirectory)
+{
+   for(auto input = invocationJSON.begin() ; input != invocationJSON.end() ; input++)
+   {
+       const QString &inputId = input.key();
+       const QJsonValue &value = input.value();
+       auto it = this->idToInputObject.find(inputId.toStdString());
+       if(it == this->idToInputObject.end())
+       {
+           continue;
+       }
+       const InputObject &inputObject = it->second;
+       if(inputObject.description["type"].toString() == "File")
+       {
+           if(inputObject.description["list"].toBool())
+           {
+               const QJsonArray &paths = value.toArray();
+               for(auto path: paths)
+               {
+                    this->populateAbsolutePath(path, directories, hasChangedCurrentDirectory);
+               }
+           }
+           else
+           {
+               this->populateAbsolutePath(value, directories, hasChangedCurrentDirectory);
+           }
+       }
+   }
+}
+
+void InvocationGUIWidget::populateOutputDirectories(const QJsonObject &invocationJSON, QStringList &directories, bool &hasChangedCurrentDirectory)
+{
     for (auto& idAndInputObject: idToInputObject)
     {
         const string &inputId = idAndInputObject.first;
+        const QString &qInputId = QString::fromStdString(inputId);
         InputObject &inputObject = idAndInputObject.second;
+        const QString &inputType = inputObject.description["type"].toString();
 
-        for (int i = 0 ; i<this->outputFiles.size() ; ++i)
+        if((inputType == "File" || inputType == "String") && invocationJSON.contains(qInputId))
         {
-            const QJsonObject &outputFilesDescription = this->outputFiles[i].toObject();
-            QString pathTemplate = outputFilesDescription["path-template"].toString();
-            QString fileName = invocationJSON[QString::fromStdString(inputId)].toString();
-            if(inputObject.description["type"].toString() == "File" && outputFilesDescription.contains("path-template-stripped-extensions"))
+            QString fileName = invocationJSON[qInputId].toString();
+            for (int i = 0 ; i<this->outputFiles.size() ; ++i)
             {
-                const QJsonArray &pathTemplateStrippedExtensions = outputFilesDescription["path-template-stripped-extensions"].toArray();
-
-                for (int j = 0 ; j<pathTemplateStrippedExtensions.size() ; ++j)
+                const QJsonObject &outputFilesDescription = this->outputFiles[i].toObject();
+                QString pathTemplate = outputFilesDescription["path-template"].toString();
+                if(inputType == "File" && outputFilesDescription.contains("path-template-stripped-extensions"))
                 {
-                    const QString &pathTemplateStrippedExtension = pathTemplateStrippedExtensions[j].toString();
-                    fileName.remove(pathTemplateStrippedExtension);
+                    const QJsonArray &pathTemplateStrippedExtensions = outputFilesDescription["path-template-stripped-extensions"].toArray();
+
+                    for (int j = 0 ; j<pathTemplateStrippedExtensions.size() ; ++j)
+                    {
+                        const QString &pathTemplateStrippedExtension = pathTemplateStrippedExtensions[j].toString();
+                        fileName.remove(pathTemplateStrippedExtension);
+                    }
                 }
-            }
-            pathTemplate.replace(inputObject.description["value-key"].toString(), fileName);
-            const QString &absolutePath = QDir(pathTemplate).absolutePath();
-            if(!filePaths.contains(absolutePath))
-            {
-                filePaths.append(absolutePath);
+                const QString &valueKey = inputObject.description["value-key"].toString();
+                if(pathTemplate.contains(valueKey))
+                {
+                    pathTemplate.replace(valueKey, fileName);
+
+                    QFileInfo fileInfo(pathTemplate);
+                    if(fileInfo.isRelative())
+                    {
+                        if(!hasChangedCurrentDirectory)
+                        {
+                            this->askChangeCurrentDirectory();
+                            hasChangedCurrentDirectory = true;
+                        }
+                    }
+                    else
+                    {
+                        const QString &absolutePath = fileInfo.absolutePath();
+                        if(!directories.contains(absolutePath))
+                        {
+                            directories.append(absolutePath);
+                        }
+                    }
+                }
             }
         }
     }

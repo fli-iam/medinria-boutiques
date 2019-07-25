@@ -27,17 +27,18 @@ InvocationWidget::InvocationWidget(QWidget *parent, SearchToolsWidget *searchToo
     connect(this->generateInvocationProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &InvocationWidget::generateInvocationProcessFinished);
 }
 
-QStringList InvocationWidget::getFilePaths()
+QStringList InvocationWidget::setAndGetAbsoluteDirectories()
 {
-    QStringList filePaths;
+    QStringList directories;
     QString invocationString = this->invocationEditor->toPlainText();
-    QJsonObject invocationJSON = QJsonDocument::fromJson(invocationString.toUtf8()).object();
-    for(auto it = invocationJSON.begin() ; it != invocationJSON.end() ; it++)
-    {
-        this->invocationGUIWidget->populateInputFilePaths(it, filePaths);
-    }
-    this->invocationGUIWidget->populateOutputFilePaths(invocationJSON, filePaths);
-    return filePaths;
+    QJsonObject invocationJsonAbsolutePath = QJsonDocument::fromJson(invocationString.toUtf8()).object();
+
+    this->invocationGUIWidget->populateDirectories(invocationJsonAbsolutePath, directories);
+
+    QJsonDocument document(invocationJsonAbsolutePath);
+    QByteArray output = document.toJson(QJsonDocument::Indented);
+    this->invocationEditor->setText(output);
+    return directories;
 }
 
 void InvocationWidget::generateInvocationFile()

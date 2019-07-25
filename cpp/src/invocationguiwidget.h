@@ -39,6 +39,8 @@ class InvocationGUIWidget : public QWidget
 private:
     SearchToolsWidget *searchToolsWidget;
     QVBoxLayout *layout;
+    QGroupBox *selectCurrentDirectoryGroupBox;
+    QLineEdit *selectCurrentDirectoryLineEdit;
     QScrollArea *scrollArea;
     QWidget *group;
     QGroupBox *optionalInputGroup;
@@ -55,8 +57,10 @@ public:
     ~InvocationGUIWidget();
     void parseDescriptor(QJsonObject *invocationJSON);
     bool generateCompleteInvocation();
-    void populateInputFilePaths(const QJsonObject::iterator &input, QStringList &filePaths);
-    void populateOutputFilePaths(const QJsonObject &invocationJSON, QStringList &filePaths);
+    // Check all input and output paths.
+    // If one or more relative paths: open a dialog for the user to select the root directory ; relative paths will be converted to absolute path from this directory
+    // Return the list of used directories to mount them (bosh -v option), to make them accessible to docker
+    void populateDirectories(QJsonObject &invocationJSON, QStringList &directories);
 
 private:
     bool inputGroupIsMutuallyExclusive(const string &inputId);
@@ -65,7 +69,12 @@ private:
     void removeMutuallyExclusiveParameters(const string &inputId);
     QJsonArray stringToArray(const string &string);
     QWidget *createUnsetGroup(const string &inputId, QWidget *widget);
+    void askChangeCurrentDirectory();
+    void populateAbsolutePath(const QJsonValue &fileName, QStringList &directories, bool &hasChangedCurrentDirectory);
+    void populateInputDirectories(const QJsonObject &invocationJSON, QStringList &directories, bool &hasChangedCurrentDirectory);
+    void populateOutputDirectories(const QJsonObject &invocationJSON, QStringList &directories, bool &hasChangedCurrentDirectory);
 
+    void createSelectCurrentDirectoryGUI();
 signals:
     void invocationChanged();
 

@@ -81,21 +81,28 @@ void ExecutionWidget::executeTool()
     {
         return;
     }
+    QString currentPath = QDir::currentPath();
+    QString boshPath = QFileInfo(BOSH_PATH).absoluteFilePath();
+
+    // The current directory changes in "invocationWidget->setAndGetAbsoluteDirectories()"
+    const QStringList &directories = this->invocationWidget->setAndGetAbsoluteDirectories();
 
     QString temporaryInvocationFilePath = this->getTemporaryInvocationFile();
 
     this->executionProcess->kill();
     QStringList args({"exec", "launch", "-s", tool->id.c_str(), temporaryInvocationFilePath.toStdString().c_str()});
 
-    const QStringList &filePaths = this->invocationWidget->getFilePaths();
-    for(const QString &filePath: filePaths)
+    for(const QString &directory: directories)
     {
         args.push_back("-v");
-        args.push_back(filePath + ":" + filePath);
+        args.push_back(directory + ":" + directory);
     }
     this->executionProcess->kill();
-    this->executionProcess->start(BOSH_PATH, args);
+
+    this->executionProcess->start(boshPath, args);
     this->output->clear();
+
+    QDir::setCurrent(currentPath);
 }
 
 void ExecutionWidget::cancelExecution()
