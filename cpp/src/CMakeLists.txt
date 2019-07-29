@@ -18,6 +18,11 @@ add_executable(${PROJECT_NAME}
     invocationguiwidget.cpp
     invocationwidget.cpp
     executionwidget.cpp
+    toolboxwidget.cpp
+    comboboxdelegate.cpp
+    dropwidget.cpp
+    abstractfilehandler.cpp
+    filehandler.cpp
     main.cpp
 )
 

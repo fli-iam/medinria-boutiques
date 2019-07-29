@@ -7,6 +7,9 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include "searchtoolswidget.h"
+#include "abstractfilehandler.h"
+#include "comboboxdelegate.h"
+#include "dropwidget.h"
 
 QT_BEGIN_NAMESPACE
 class QScrollArea;
@@ -38,6 +41,7 @@ class InvocationGUIWidget : public QWidget
     Q_OBJECT
 private:
     SearchToolsWidget *searchToolsWidget;
+    AbstractFileHandler *FileHandler;
     QVBoxLayout *layout;
     QGroupBox *selectCurrentDirectoryGroupBox;
     QLineEdit *selectCurrentDirectoryLineEdit;
@@ -53,11 +57,11 @@ private:
     bool ignoreSignals;
 
 public:
-    explicit InvocationGUIWidget(QWidget *parent = nullptr, SearchToolsWidget *searchToolsWidget = nullptr);
+    explicit InvocationGUIWidget(QWidget *parent = nullptr, SearchToolsWidget *searchToolsWidget = nullptr, AbstractFileHandler *toolBox = nullptr);
     ~InvocationGUIWidget();
     void parseDescriptor(QJsonObject *invocationJSON);
     bool generateCompleteInvocation();
-    // Check all input and output paths.
+    // Check all input and output paths. Change [CURRENT INPUT] to actual temporary file created for this purpose in QDir::tempPath().
     // If one or more relative paths: open a dialog for the user to select the root directory ; relative paths will be converted to absolute path from this directory
     // Return the list of used directories to mount them (bosh -v option), to make them accessible to docker
     void populateDirectories(QJsonObject &invocationJSON, QStringList &directories);
@@ -70,11 +74,16 @@ private:
     QJsonArray stringToArray(const string &string);
     QWidget *createUnsetGroup(const string &inputId, QWidget *widget);
     void askChangeCurrentDirectory();
-    void populateAbsolutePath(const QJsonValue &fileName, QStringList &directories, bool &hasChangedCurrentDirectory);
+    void populateAbsolutePath(const QJsonValue &fileNameValue, QStringList &directories, bool &hasChangedCurrentDirectory);
     void populateInputDirectories(const QJsonObject &invocationJSON, QStringList &directories, bool &hasChangedCurrentDirectory);
     void populateOutputDirectories(const QJsonObject &invocationJSON, QStringList &directories, bool &hasChangedCurrentDirectory);
 
     void createSelectCurrentDirectoryGUI();
+
+    QString createTemporaryInputFileForMimeData(const QMimeData * mimeData);
+    QString createTemporaryInputFileForCurrentInput();
+    pair<QString, QString> getFormatForInputFile(const QList<FormatObject> &fileFormats);
+
 signals:
     void invocationChanged();
 

@@ -5,6 +5,7 @@
 #include "searchtoolswidget.h"
 #include "invocationwidget.h"
 #include "executionwidget.h"
+#include "toolboxwidget.h"
 
 class MainWindow : public QMainWindow
 {
@@ -13,6 +14,7 @@ public:
     SearchToolsWidget *searchToolsWidget;
     InvocationWidget *invocationWidget;
     ExecutionWidget *executionWidget;
+    ToolBoxWidget *toolBoxWidget;
     QWidget *centralWidget;
 //    QLayout *layout;
 

@@ -4,8 +4,9 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
+    this->toolBoxWidget = new ToolBoxWidget(this);
     this->searchToolsWidget = new SearchToolsWidget(this);
-    this->invocationWidget = new InvocationWidget(this, this->searchToolsWidget);
+    this->invocationWidget = new InvocationWidget(this, this->searchToolsWidget, this->toolBoxWidget->fileHandler);
     this->executionWidget = new ExecutionWidget(this, this->searchToolsWidget, this->invocationWidget);
 
     this->invocationWidget->hide();
@@ -17,6 +18,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(this->searchToolsWidget, &SearchToolsWidget::toolDeselected, this->executionWidget, &ExecutionWidget::toolDeselected);
 
     QVBoxLayout *scrollAreaLayout = new QVBoxLayout();
+    scrollAreaLayout->addWidget(this->toolBoxWidget);
     scrollAreaLayout->addWidget(this->searchToolsWidget);
     scrollAreaLayout->addWidget(this->invocationWidget);
     scrollAreaLayout->addWidget(this->executionWidget);

@@ -1,8 +1,9 @@
 import os
+import re
 import string
 
 namePrefix = "medBoutiques"
-namePrefixCapital = upper(namePrefix)
+namePrefixCapital = namePrefix.upper()
 
 nameMap = {
 	"executionwidget": "Execution",
@@ -16,9 +17,9 @@ for root, dirs, files in os.walk("src/", topdown=False):
 		(basename, extension) = os.path.splitext(name)
 		if basename in nameMap:
 
-			baseNameCapital = upper(basename)
+			baseNameCapital = basename.upper()
 
-			newName = namePrefix + nameMap[basename] + '.' + extension
+			newName = namePrefix + nameMap[basename] + extension
 
 			outputFile = open(os.path.join('medInriaPlugin/', newName),'w')
 
@@ -29,8 +30,8 @@ for root, dirs, files in os.walk("src/", topdown=False):
 
 						isDefine = False
 						for linePrefix in ["#ifndef ", "#define ", "#endif // "]:
-							if line == linePrefix + baseNameCapital + "_H":
-								line = linePrefix + namePrefixCapital + baseNameCapital.replace("WIDGET", "") + "_H"
+							if line.startswith(linePrefix + baseNameCapital + "_H"):
+								line = linePrefix + namePrefixCapital + baseNameCapital.replace("WIDGET", "") + "_H\n"
 								isDefine = True
 
 						isInclude = False
@@ -38,12 +39,13 @@ for root, dirs, files in os.walk("src/", topdown=False):
 						include_search = re.search('#include "(.*).h"', line)
 						if include_search:
 							includedFileName = include_search.group(1)
-							line.replace(includedFileName, namePrefix + nameMap[includedFileName])
+							line = line.replace(includedFileName, namePrefix + nameMap[includedFileName])
 							isInclude = True
 
 						if not isDefine and not isInclude:
 
 							for oldName, newName in nameMap.items():
-								line.replace(newName + "Widget", namePrefix + nameMap[basename])
+								line = line.replace(newName + "Widget", namePrefix + newName)
 
-						print(line, file=outputFile)
+						outputFile.write(line)
+						# print(line, file=outputFile)

@@ -2,15 +2,16 @@
 #include <QtWidgets>
 #include "invocationguiwidget.h"
 
-InvocationGUIWidget::InvocationGUIWidget(QWidget *parent, SearchToolsWidget *searchToolsWidget) :
+InvocationGUIWidget::InvocationGUIWidget(QWidget *parent, SearchToolsWidget *searchToolsWidget, AbstractFileHandler *FileHandler) :
     QWidget(parent),
     searchToolsWidget(searchToolsWidget),
+    FileHandler(FileHandler),
     optionalInputGroup(nullptr),
     completeInvocationJSON(nullptr),
     ignoreSignals(false)
 {
     this->layout = new QVBoxLayout(this);
-    this->setMinimumHeight(500);
+    this->setMinimumHeight(750);
     this->scrollArea = new QScrollArea(this);
 //    this->scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     this->scrollArea->setWidgetResizable(true);
@@ -226,7 +227,8 @@ QWidget *InvocationGUIWidget::createUnsetGroup(const string &inputId, QWidget *w
     QWidget *hGroup = new QWidget();
     QPushButton *unsetPushButton = new QPushButton("Unset");
     unsetPushButton->setMaximumWidth(60);
-    connect(unsetPushButton, &QPushButton::clicked, [this, inputId]() {
+    connect(unsetPushButton, &QPushButton::clicked, [this, inputId]()
+    {
         this->invocationJSON->remove(QString::fromStdString(inputId));
         this->emitInvocationChanged();
     } );
@@ -297,7 +299,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 
     QJsonObject json = jsonDocument.object();
 
-    auto mainInputsGroupAndLayout = this->createGroupAndLayout("Main parameters");
+    auto mainInputsGroupAndLayout = this->createGroupAndLayout("Required parameters");
     auto optionalInputsGroupAndLayout = this->createGroupAndLayout("Optional parameters");
 
     this->optionalInputGroup = optionalInputsGroupAndLayout.first;
@@ -431,7 +433,8 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                 if(groupObject->optional)
                 {
                     groupObject->groupBox->setCheckable(true);
-                    connect(groupObject->groupBox, &QGroupBox::toggled, this, [this, groupObject](bool on) {
+                    connect(groupObject->groupBox, &QGroupBox::toggled, this, [this, groupObject](bool on)
+                    {
                         const QString &inputId = groupObject->comboBox->currentData().toString();
                         if(on)
                         {
@@ -456,7 +459,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         if(inputType == "String" || inputType == "Number" || inputType == "File")
         {
 //            widget = new QGroupBox();
-            widget = new QWidget();
+            widget = inputType == "File" ? new DropWidget() : new QWidget();
             QHBoxLayout *layout = new QHBoxLayout();
             QLabel *label = new QLabel(inputName + ":");
             layout->addWidget(label);
@@ -481,6 +484,47 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 
                     connect(pushButton, &QPushButton::clicked, [this, inputName, lineEdit]() { lineEdit->setText("\"" + QFileDialog::getOpenFileNames(this, "Select " + inputName).join("\", \"") + "\""); } );
                     layout->addWidget(pushButton);
+
+                    QPushButton *SetCurrentInputPushButton = new QPushButton("Add input");
+                    connect(SetCurrentInputPushButton, &QPushButton::clicked, [this, lineEdit]()
+                    {
+                        QString text = lineEdit->text();
+                        text += text.length() > 0 ? ", " : "";
+                        const QString &currentInputFilePath = this->createTemporaryInputFileForCurrentInput();
+                        lineEdit->setText(text + "\"" + currentInputFilePath + "\"");
+                    } );
+
+                    layout->addWidget(SetCurrentInputPushButton);
+                    connect(static_cast<DropWidget*>(widget), &DropWidget::dragEnter, [this](QDragEnterEvent *event) { this->FileHandler->checkAcceptDragEvent(event); });
+                    connect(static_cast<DropWidget*>(widget), &DropWidget::drop, [this, lineEdit](QDropEvent *event)
+                    {
+                        const QMimeData *mimeData = event->mimeData();
+                        QStringList paths;
+                        if(mimeData->hasUrls())
+                        {
+                            const QList<QUrl> &urls= mimeData->urls();
+                            for (int i = 0 ; i < urls.size() ; ++i)
+                            {
+                                paths.append(urls.at(i).toLocalFile());
+                            }
+                        }
+                        else
+                        {
+                            QString filePath = this->createTemporaryInputFileForMimeData(mimeData);
+                            if(!filePath.isEmpty())
+                            {
+                                paths.append(filePath);
+                            }
+                        }
+
+                        QString text = lineEdit->text();
+                        for (int i = 0 ; i < paths.size() ; ++i)
+                        {
+                            text += text.length() > 0 ? ", " : "";
+                            text += "\"" + paths[i] + "\"";
+                        }
+                        lineEdit->setText(text);
+                    });
                 }
             }
             else
@@ -570,10 +614,31 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                     connect(lineEdit, &QLineEdit::textChanged, [this, inputId](){ this->valueChanged(inputId); });
                     layout->addWidget(lineEdit);
 
-                    QPushButton *pushButton = new QPushButton("Select file");
+                    QPushButton *selectFilePushButton = new QPushButton("Select file");
+                    connect(selectFilePushButton, &QPushButton::clicked, [this, inputName, lineEdit]() { lineEdit->setText(QFileDialog::getOpenFileName(this, "Select " + inputName)); } );
+                    layout->addWidget(selectFilePushButton);
 
-                    connect(pushButton, &QPushButton::clicked, [this, inputName, lineEdit]() { lineEdit->setText(QFileDialog::getOpenFileName(this, "Select " + inputName)); } );
-                    layout->addWidget(pushButton);
+                    QPushButton *SetCurrentInputPushButton = new QPushButton("Set input");
+                    connect(SetCurrentInputPushButton, &QPushButton::clicked, [this, lineEdit]() { lineEdit->setText(this->createTemporaryInputFileForCurrentInput()); } );
+                    layout->addWidget(SetCurrentInputPushButton);
+
+                    widget->setAcceptDrops(true);
+
+                    connect(static_cast<DropWidget*>(widget), &DropWidget::dragEnter, [this](QDragEnterEvent *event) { this->FileHandler->checkAcceptDragEvent(event); });
+                    connect(static_cast<DropWidget*>(widget), &DropWidget::drop, [this, lineEdit](QDropEvent *event)
+                    {
+                        const QMimeData *mimeData = event->mimeData();
+                        QString filePath;
+                        if(mimeData->hasUrls())
+                        {
+                            filePath = mimeData->urls().first().toLocalFile();
+                        }
+                        else
+                        {
+                            filePath = this->createTemporaryInputFileForMimeData(mimeData);
+                        }
+                        lineEdit->setText(filePath);
+                    });
                 }
             }
             widget->setToolTip(inputDescription);
@@ -663,9 +728,14 @@ void InvocationGUIWidget::askChangeCurrentDirectory()
     }
 }
 
-void InvocationGUIWidget::populateAbsolutePath(const QJsonValue &fileName, QStringList &directories, bool &hasChangedCurrentDirectory)
+void InvocationGUIWidget::populateAbsolutePath(const QJsonValue &fileNameValue, QStringList &directories, bool &hasChangedCurrentDirectory)
 {
-    QFileInfo fileInfo(fileName.toString());
+//    QString fileName = fileNameValue.toString();
+//    if(fileName == "[CURRENT INPUT]")
+//    {
+
+//    }
+    QFileInfo fileInfo(fileNameValue.toString());
     if(fileInfo.isRelative())
     {
         if(!hasChangedCurrentDirectory)
@@ -764,4 +834,91 @@ void InvocationGUIWidget::populateOutputDirectories(const QJsonObject &invocatio
             }
         }
     }
+}
+
+QString InvocationGUIWidget::createTemporaryInputFileForMimeData(const QMimeData * mimeData)
+{
+    const QList<FormatObject> &fileFormats = this->FileHandler->getFileFormatsForMimeData(mimeData);
+    const auto &typeAndExtension = this->getFormatForInputFile(fileFormats);
+    return this->FileHandler->createTemporaryInputFileForMimeData(mimeData, typeAndExtension.first, typeAndExtension.second);
+}
+
+QString InvocationGUIWidget::createTemporaryInputFileForCurrentInput()
+{
+    const QList<FormatObject> &fileFormats = this->FileHandler->getFileFormatsForCurrentInput();
+    const auto &typeAndExtension = this->getFormatForInputFile(fileFormats);
+    return this->FileHandler->createTemporaryInputFileForCurrentInput(typeAndExtension.first, typeAndExtension.second);
+}
+
+pair<QString, QString> InvocationGUIWidget::getFormatForInputFile(const QList<FormatObject> &fileFormats)
+{
+    QMessageBox messageBox;
+
+//    QLayout* messageBoxLayout = messageBox.layout();
+    QGridLayout* messageBoxLayout = qobject_cast<QGridLayout*>(layout);
+
+    QWidget *hGroup = new QWidget();
+    QHBoxLayout *hLayout = new QHBoxLayout();
+
+    QCheckBox *checkBox = new QCheckBox("Always use this file format for this kind of data");
+    checkBox->setCheckState(Qt::Checked);
+
+
+
+//    QVBoxLayout* messageBoxLayout = qobject_cast<QVBoxLayout*>(messageBox.layout());
+
+    messageBox.setText("Please select a file type");
+    messageBox.setInformativeText("This input must be saved as a file to be used by Boutiques tools.\n Please choose a file format for the temporary file.");
+
+
+
+    messageBox.setStandardButtons(QMessageBox::Ok);
+    messageBox.setDefaultButton(QMessageBox::Ok);
+
+//    QBoxLayout *messageBoxLayout = static_cast<QBoxLayout*>(messageBox.layout());
+
+    QComboBox* typeComboBox = new QComboBox();
+//    typeComboBox->setItemDelegate(new ComboBoxDelegate());
+
+    QStandardItemModel * model = new QStandardItemModel();
+
+    typeComboBox->setModel(model);
+    for(const FormatObject &formatObject : fileFormats)
+    {
+//        typeComboBox->addItem(formatObject.description, QVariant("Parent"));
+//        typeComboBox->setItemData(typeComboBox->count() - 1, formatObject.extensions.first(), Qt::UserRole + 1);
+//        typeComboBox->setItemData(typeComboBox->count() - 1, formatObject.type, Qt::UserRole + 2);
+        QStandardItem* item = new QStandardItem( formatObject.description );
+//        item->setFlags( item->flags() & ~( Qt::ItemIsEnabled | Qt::ItemIsSelectable ) );
+//        item->setFlags( item->flags() & ~( Qt::ItemIsEnabled ) );
+//        item->setData( "parent", Qt::AccessibleDescriptionRole );
+        item->setData(formatObject.extensions.first(), Qt::UserRole + 1);
+        item->setData(formatObject.type, Qt::UserRole + 2);
+        QFont font = item->font();
+        font.setBold( true );
+        font.setItalic( true );
+        item->setSelectable(false);
+        item->setFont( font );
+        model->appendRow( item );
+        for(const QString &extension: formatObject.extensions)
+        {
+            typeComboBox->addItem(extension, QVariant("Child"));
+            typeComboBox->setItemData(typeComboBox->count() - 1, extension, Qt::UserRole + 1);
+            typeComboBox->setItemData(typeComboBox->count() - 1, formatObject.type, Qt::UserRole + 2);
+        }
+    }
+
+    messageBoxLayout->addWidget(hGroup, messageBoxLayout->rowCount()-2, 0);
+    messageBoxLayout->addWidget(checkBox, messageBoxLayout->rowCount()-2, 0);
+
+    hLayout->addWidget(new QLabel("File format:", hGroup));
+    hLayout->addWidget(typeComboBox);
+
+
+    messageBox.exec();
+
+    QString chosenExtension = typeComboBox->itemData(typeComboBox->currentIndex(), Qt::UserRole + 1).toString();
+    QString chosenType = typeComboBox->itemData(typeComboBox->currentIndex(), Qt::UserRole + 2).toString();
+
+    return pair<QString, QString>(chosenType, chosenExtension);
 }

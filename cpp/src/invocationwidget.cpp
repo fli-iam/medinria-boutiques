@@ -1,11 +1,13 @@
 #include <QtWidgets>
 #include "invocationwidget.h"
 
-InvocationWidget::InvocationWidget(QWidget *parent, SearchToolsWidget *searchToolsWidget) : QWidget(parent), searchToolsWidget(searchToolsWidget)
+InvocationWidget::InvocationWidget(QWidget *parent, SearchToolsWidget *searchToolsWidget, AbstractFileHandler *FileHandler) :
+    QWidget(parent),
+    searchToolsWidget(searchToolsWidget)
 {
     this->layout = new QVBoxLayout();
 
-    this->invocationGUIWidget = new InvocationGUIWidget(this, this->searchToolsWidget);
+    this->invocationGUIWidget = new InvocationGUIWidget(this, this->searchToolsWidget, FileHandler);
     this->openInvocationButton = new QPushButton("Open invocation file");
 
     this->invocationEditor = new QTextEdit();

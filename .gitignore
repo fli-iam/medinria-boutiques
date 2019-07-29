@@ -1,7 +1,8 @@
 data/
-cpp/src/CMakeLists.txt.user
+cpp/src/CMakeLists.txt.userx
 cpp/src/*.autosave
 cpp/build*
+cpp/medInriaPlugin
 python/bin/
 python/include/
 python/lib/

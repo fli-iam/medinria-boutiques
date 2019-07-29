@@ -4,6 +4,7 @@
 #include <QWidget>
 #include "searchtoolswidget.h"
 #include "invocationguiwidget.h"
+#include "abstractfilehandler.h"
 
 QT_BEGIN_NAMESPACE
 QT_END_NAMESPACE
@@ -24,7 +25,7 @@ private:
     QProcess *generateInvocationProcess;
 
 public:
-    explicit InvocationWidget(QWidget *parent = nullptr, SearchToolsWidget *searchToolsWidget = nullptr);
+    explicit InvocationWidget(QWidget *parent = nullptr, SearchToolsWidget *searchToolsWidget = nullptr, AbstractFileHandler *FileHandler = nullptr);
     QStringList setAndGetAbsoluteDirectories();
 
 private:
