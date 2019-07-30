@@ -6,10 +6,13 @@ namePrefix = "medBoutiques"
 namePrefixCapital = namePrefix.upper()
 
 nameMap = {
-	"executionwidget": "Execution",
-	"invocationwidget": "Invocation",
-	"invocationguiwidget": "InvocationGUI",
-	"searchtoolswidget": "SearchTools",
+	"executionwidget": "ExecutionWidget",
+	"invocationwidget": "InvocationWidget",
+	"invocationguiwidget": "InvocationGUIWidget",
+	"searchtoolswidget": "SearchToolsWidget",
+	"dropwidget": "DropWidget",
+	"abstractfilehandler": "AbstractFileHandler",
+	"filehandler": "FileHandler",
 }
 
 for root, dirs, files in os.walk("src/", topdown=False):
@@ -31,7 +34,7 @@ for root, dirs, files in os.walk("src/", topdown=False):
 						isDefine = False
 						for linePrefix in ["#ifndef ", "#define ", "#endif // "]:
 							if line.startswith(linePrefix + baseNameCapital + "_H"):
-								line = linePrefix + namePrefixCapital + baseNameCapital.replace("WIDGET", "") + "_H\n"
+								line = linePrefix + namePrefixCapital + baseNameCapital + "_H\n"
 								isDefine = True
 
 						isInclude = False
@@ -39,13 +42,15 @@ for root, dirs, files in os.walk("src/", topdown=False):
 						include_search = re.search('#include "(.*).h"', line)
 						if include_search:
 							includedFileName = include_search.group(1)
-							line = line.replace(includedFileName, namePrefix + nameMap[includedFileName])
+							if includedFileName in nameMap:
+								line = line.replace(includedFileName, namePrefix + nameMap[includedFileName])
 							isInclude = True
 
 						if not isDefine and not isInclude:
 
 							for oldName, newName in nameMap.items():
-								line = line.replace(newName + "Widget", namePrefix + newName)
+								# line = line.replace(newName, namePrefix + newName)
+								line = re.sub(r"\b%s\b" % newName , namePrefix + newName, line)
 
 						outputFile.write(line)
 						# print(line, file=outputFile)

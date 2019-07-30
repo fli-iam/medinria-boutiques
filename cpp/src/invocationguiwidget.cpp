@@ -5,7 +5,7 @@
 InvocationGUIWidget::InvocationGUIWidget(QWidget *parent, SearchToolsWidget *searchToolsWidget, AbstractFileHandler *FileHandler) :
     QWidget(parent),
     searchToolsWidget(searchToolsWidget),
-    FileHandler(FileHandler),
+    fileHandler(FileHandler),
     optionalInputGroup(nullptr),
     completeInvocationJSON(nullptr),
     ignoreSignals(false)
@@ -62,7 +62,7 @@ void InvocationGUIWidget::createSelectCurrentDirectoryGUI()
     this->layout->addWidget(selectCurrentDirectoryGroupBox);
 }
 
-bool InvocationGUIWidget::inputGroupIsMutuallyExclusive(const string &inputId)
+bool InvocationGUIWidget::inputGroupIsMutuallyExclusive(const QString &inputId)
 {
     auto it = this->idToInputObject.find(inputId);
     if(it == this->idToInputObject.end())
@@ -73,7 +73,7 @@ bool InvocationGUIWidget::inputGroupIsMutuallyExclusive(const string &inputId)
     return inputObject.group != nullptr && inputObject.group->description["mutually-exclusive"].toBool();
 }
 
-void InvocationGUIWidget::removeMutuallyExclusiveParameters(const string &inputId)
+void InvocationGUIWidget::removeMutuallyExclusiveParameters(const QString &inputId)
 {
     if(this->inputGroupIsMutuallyExclusive(inputId))
     {
@@ -92,13 +92,13 @@ void InvocationGUIWidget::removeMutuallyExclusiveParameters(const string &inputI
     }
 }
 
-QJsonArray InvocationGUIWidget::stringToArray(const string& string)
+QJsonArray InvocationGUIWidget::stringToArray(const QString &string)
 {
-    QJsonDocument jsonDocument(QJsonDocument::fromJson(QByteArray::fromStdString("[" + string + "]")));
+    QJsonDocument jsonDocument(QJsonDocument::fromJson(QByteArray::fromStdString("[" + string.toStdString() + "]")));
     return jsonDocument.array();
 }
 
-void InvocationGUIWidget::valueChanged(const string& inputId)
+void InvocationGUIWidget::valueChanged(const QString &inputId)
 {
     if(this->ignoreSignals)
     {
@@ -113,11 +113,11 @@ void InvocationGUIWidget::valueChanged(const string& inputId)
     bool removeInputFromInvocation = inputIsListButValueIsInvalidOrEmpty;
     if(removeInputFromInvocation)
     {
-        this->invocationJSON->remove(QString::fromStdString(inputId));
+        this->invocationJSON->remove(inputId);
     }
     else
     {
-        this->invocationJSON->insert(QString::fromStdString(inputId), value);
+        this->invocationJSON->insert(inputId, value);
     }
     this->emitInvocationChanged();
 }
@@ -133,7 +133,7 @@ void InvocationGUIWidget::optionalGroupChanged(bool on)
             const QStringList& keys = this->completeInvocationJSON->keys();
             for(const auto& key: keys)
             {
-                auto it = this->idToInputObject.find(key.toStdString());
+                auto it = this->idToInputObject.find(key);
                 if(it != this->idToInputObject.end())
                 {
                     const QJsonObject& description = it->second.description;
@@ -158,7 +158,7 @@ void InvocationGUIWidget::optionalGroupChanged(bool on)
         const QStringList& keys = this->invocationJSON->keys();
         for(const auto& key: keys)
         {
-            auto it = this->idToInputObject.find(key.toStdString());
+            auto it = this->idToInputObject.find(key);
             if(it != this->idToInputObject.end())
             {
                 const QJsonObject& description = it->second.description;
@@ -172,10 +172,10 @@ void InvocationGUIWidget::optionalGroupChanged(bool on)
     this->emitInvocationChanged();
 }
 
-pair<QGroupBox *, QVBoxLayout *> InvocationGUIWidget::createGroupAndLayout(const string &name)
+pair<QGroupBox *, QVBoxLayout *> InvocationGUIWidget::createGroupAndLayout(const QString &name)
 {
     QGroupBox *group = new QGroupBox();
-    group->setTitle(QString::fromStdString(name));
+    group->setTitle(name);
     QVBoxLayout *layout = new QVBoxLayout(group);
     group->setLayout(layout);
     return pair<QGroupBox *, QVBoxLayout *>(group, layout);
@@ -191,7 +191,7 @@ void InvocationGUIWidget::mutuallyExclusiveGroupChanged(GroupObject *groupObject
     for(const auto &member: members)
     {
         const QString &memberId = member.toString();
-        const auto &it = this->idToInputObject.find(memberId.toStdString());
+        const auto &it = this->idToInputObject.find(memberId);
         this->invocationJSON->remove(memberId);
         if(it == this->idToInputObject.end() || it->second.widget == nullptr)
         {
@@ -201,7 +201,7 @@ void InvocationGUIWidget::mutuallyExclusiveGroupChanged(GroupObject *groupObject
     }
 
     const QString &inputId = groupObject->comboBox->itemData(itemIndex).toString();
-    InputObject &inputObject = this->idToInputObject.at(inputId.toStdString());
+    InputObject &inputObject = this->idToInputObject.at(inputId);
     if(inputObject.widget != nullptr)
     {
         inputObject.widget->show();
@@ -221,7 +221,7 @@ void InvocationGUIWidget::emitInvocationChanged()
     this->emitInvocationChangedTimer->start(250);
 }
 
-QWidget *InvocationGUIWidget::createUnsetGroup(const string &inputId, QWidget *widget)
+QWidget *InvocationGUIWidget::createUnsetGroup(const QString &inputId, QWidget *widget)
 {
     QHBoxLayout *hLayout = new QHBoxLayout();
     QWidget *hGroup = new QWidget();
@@ -229,7 +229,7 @@ QWidget *InvocationGUIWidget::createUnsetGroup(const string &inputId, QWidget *w
     unsetPushButton->setMaximumWidth(60);
     connect(unsetPushButton, &QPushButton::clicked, [this, inputId]()
     {
-        this->invocationJSON->remove(QString::fromStdString(inputId));
+        this->invocationJSON->remove(inputId);
         this->emitInvocationChanged();
     } );
     hGroup->setLayout(hLayout);
@@ -318,10 +318,10 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
     for (int i = 0 ; i<inputArray.size() ; ++i)
     {
         const QJsonObject &description = inputArray[i].toObject();
-        const auto &result = this->idToInputObject.emplace(pair<string, InputObject>(description["id"].toString().toStdString(), InputObject(description)));
+        const auto &result = this->idToInputObject.emplace(pair<QString, InputObject>(description["id"].toString(), InputObject(description)));
         if(!result.second)
         {
-            QMessageBox::warning(this, "Error in descriptor file", QString::fromStdString("Input " + result.first->first + "appears twice in descriptor, ignoring one of them..."));
+            QMessageBox::warning(this, "Error in descriptor file", "Input " + result.first->first + "appears twice in descriptor, ignoring one of them...");
         }
         else
         {
@@ -344,14 +344,14 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         {
             continue;
         }
-        auto groupAndLayout = this->createGroupAndLayout(groupObject.description["name"].toString().toStdString());
+        auto groupAndLayout = this->createGroupAndLayout(groupObject.description["name"].toString());
         groupObject.groupBox = groupAndLayout.first;
         groupObject.layout = groupAndLayout.second;
         bool groupIsOptional = true;
         QJsonArray memberArray = groupObject.description["members"].toArray();
         for (int j = 0 ; j<memberArray.size() ; ++j)
         {
-            auto it = this->idToInputObject.find(memberArray[j].toString().toStdString());
+            auto it = this->idToInputObject.find(memberArray[j].toString());
             if(it == this->idToInputObject.end())
             {
                 continue;
@@ -369,14 +369,14 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 
     for (auto& idAndInputObject: idToInputObject)
     {
-        const string &inputId = idAndInputObject.first;
+        const QString &inputId = idAndInputObject.first;
         InputObject &inputObject = idAndInputObject.second;
         GroupObject *groupObject = inputObject.group;
 
         const QString &inputName = inputObject.description["name"].toString();
         const QString &inputType = inputObject.description["type"].toString();
         const QString &inputDescription = inputObject.description["description"].toString();
-        const QJsonValue &inputValue = this->invocationJSON->value(QString::fromStdString(inputId));
+        const QJsonValue &inputValue = this->invocationJSON->value(inputId);
         bool inputIsOptional = inputObject.description["optional"].toBool();
 
         QWidget *widget = nullptr;
@@ -438,7 +438,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                         const QString &inputId = groupObject->comboBox->currentData().toString();
                         if(on)
                         {
-                            InputObject &inputObject = this->idToInputObject.at(inputId.toStdString());
+                            InputObject &inputObject = this->idToInputObject.at(inputId);
                             this->invocationJSON->insert(inputId, inputObject.widget != nullptr ? inputObject.getValue() : QJsonValue(true));
                         }
                         else
@@ -449,7 +449,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                     } );
                 }
             }
-            groupObject->comboBox->addItem(inputName, QVariant(QString::fromStdString(inputId)));
+            groupObject->comboBox->addItem(inputName, QVariant(inputId));
             if(!inputValue.isNull())
             {
                 groupObject->comboBox->setCurrentIndex(groupObject->comboBox->count() - 1);
@@ -474,7 +474,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                 valueList.setArray(inputValue.toArray());
                 lineEdit->setText(QString::fromUtf8(valueList.toJson()).remove('[').remove(']'));
 
-                inputObject.getValue = [this, lineEdit]() { return QJsonValue(this->stringToArray(lineEdit->text().toStdString())); };
+                inputObject.getValue = [this, lineEdit]() { return QJsonValue(this->stringToArray(lineEdit->text())); };
                 connect(lineEdit, &QLineEdit::textChanged, [this, inputId](){ this->valueChanged(inputId); });
                 layout->addWidget(lineEdit);
 
@@ -490,12 +490,12 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                     {
                         QString text = lineEdit->text();
                         text += text.length() > 0 ? ", " : "";
-                        const QString &currentInputFilePath = this->createTemporaryInputFileForCurrentInput();
+                        const QString &currentInputFilePath = this->fileHandler->createTemporaryInputFileForCurrentInput();
                         lineEdit->setText(text + "\"" + currentInputFilePath + "\"");
                     } );
 
                     layout->addWidget(SetCurrentInputPushButton);
-                    connect(static_cast<DropWidget*>(widget), &DropWidget::dragEnter, [this](QDragEnterEvent *event) { this->FileHandler->checkAcceptDragEvent(event); });
+                    connect(static_cast<DropWidget*>(widget), &DropWidget::dragEnter, [this](QDragEnterEvent *event) { this->fileHandler->checkAcceptDragEvent(event); });
                     connect(static_cast<DropWidget*>(widget), &DropWidget::drop, [this, lineEdit](QDropEvent *event)
                     {
                         const QMimeData *mimeData = event->mimeData();
@@ -510,7 +510,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                         }
                         else
                         {
-                            QString filePath = this->createTemporaryInputFileForMimeData(mimeData);
+                            QString filePath = this->fileHandler->createTemporaryInputFileForMimeData(mimeData);
                             if(!filePath.isEmpty())
                             {
                                 paths.append(filePath);
@@ -619,12 +619,12 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                     layout->addWidget(selectFilePushButton);
 
                     QPushButton *SetCurrentInputPushButton = new QPushButton("Set input");
-                    connect(SetCurrentInputPushButton, &QPushButton::clicked, [this, lineEdit]() { lineEdit->setText(this->createTemporaryInputFileForCurrentInput()); } );
+                    connect(SetCurrentInputPushButton, &QPushButton::clicked, [this, lineEdit]() { lineEdit->setText(this->fileHandler->createTemporaryInputFileForCurrentInput()); } );
                     layout->addWidget(SetCurrentInputPushButton);
 
                     widget->setAcceptDrops(true);
 
-                    connect(static_cast<DropWidget*>(widget), &DropWidget::dragEnter, [this](QDragEnterEvent *event) { this->FileHandler->checkAcceptDragEvent(event); });
+                    connect(static_cast<DropWidget*>(widget), &DropWidget::dragEnter, [this](QDragEnterEvent *event) { this->fileHandler->checkAcceptDragEvent(event); });
                     connect(static_cast<DropWidget*>(widget), &DropWidget::drop, [this, lineEdit](QDropEvent *event)
                     {
                         const QMimeData *mimeData = event->mimeData();
@@ -635,7 +635,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                         }
                         else
                         {
-                            filePath = this->createTemporaryInputFileForMimeData(mimeData);
+                            filePath = this->fileHandler->createTemporaryInputFileForMimeData(mimeData);
                         }
                         lineEdit->setText(filePath);
                     });
@@ -758,7 +758,7 @@ void InvocationGUIWidget::populateInputDirectories(const QJsonObject &invocation
    {
        const QString &inputId = input.key();
        const QJsonValue &value = input.value();
-       auto it = this->idToInputObject.find(inputId.toStdString());
+       auto it = this->idToInputObject.find(inputId);
        if(it == this->idToInputObject.end())
        {
            continue;
@@ -786,14 +786,13 @@ void InvocationGUIWidget::populateOutputDirectories(const QJsonObject &invocatio
 {
     for (auto& idAndInputObject: idToInputObject)
     {
-        const string &inputId = idAndInputObject.first;
-        const QString &qInputId = QString::fromStdString(inputId);
+        const QString &inputId = idAndInputObject.first;
         InputObject &inputObject = idAndInputObject.second;
         const QString &inputType = inputObject.description["type"].toString();
 
-        if((inputType == "File" || inputType == "String") && invocationJSON.contains(qInputId))
+        if((inputType == "File" || inputType == "String") && invocationJSON.contains(inputId))
         {
-            QString fileName = invocationJSON[qInputId].toString();
+            QString fileName = invocationJSON[inputId].toString();
             for (int i = 0 ; i<this->outputFiles.size() ; ++i)
             {
                 const QJsonObject &outputFilesDescription = this->outputFiles[i].toObject();
@@ -834,91 +833,4 @@ void InvocationGUIWidget::populateOutputDirectories(const QJsonObject &invocatio
             }
         }
     }
-}
-
-QString InvocationGUIWidget::createTemporaryInputFileForMimeData(const QMimeData * mimeData)
-{
-    const QList<FormatObject> &fileFormats = this->FileHandler->getFileFormatsForMimeData(mimeData);
-    const auto &typeAndExtension = this->getFormatForInputFile(fileFormats);
-    return this->FileHandler->createTemporaryInputFileForMimeData(mimeData, typeAndExtension.first, typeAndExtension.second);
-}
-
-QString InvocationGUIWidget::createTemporaryInputFileForCurrentInput()
-{
-    const QList<FormatObject> &fileFormats = this->FileHandler->getFileFormatsForCurrentInput();
-    const auto &typeAndExtension = this->getFormatForInputFile(fileFormats);
-    return this->FileHandler->createTemporaryInputFileForCurrentInput(typeAndExtension.first, typeAndExtension.second);
-}
-
-pair<QString, QString> InvocationGUIWidget::getFormatForInputFile(const QList<FormatObject> &fileFormats)
-{
-    QMessageBox messageBox;
-
-//    QLayout* messageBoxLayout = messageBox.layout();
-    QGridLayout* messageBoxLayout = qobject_cast<QGridLayout*>(layout);
-
-    QWidget *hGroup = new QWidget();
-    QHBoxLayout *hLayout = new QHBoxLayout();
-
-    QCheckBox *checkBox = new QCheckBox("Always use this file format for this kind of data");
-    checkBox->setCheckState(Qt::Checked);
-
-
-
-//    QVBoxLayout* messageBoxLayout = qobject_cast<QVBoxLayout*>(messageBox.layout());
-
-    messageBox.setText("Please select a file type");
-    messageBox.setInformativeText("This input must be saved as a file to be used by Boutiques tools.\n Please choose a file format for the temporary file.");
-
-
-
-    messageBox.setStandardButtons(QMessageBox::Ok);
-    messageBox.setDefaultButton(QMessageBox::Ok);
-
-//    QBoxLayout *messageBoxLayout = static_cast<QBoxLayout*>(messageBox.layout());
-
-    QComboBox* typeComboBox = new QComboBox();
-//    typeComboBox->setItemDelegate(new ComboBoxDelegate());
-
-    QStandardItemModel * model = new QStandardItemModel();
-
-    typeComboBox->setModel(model);
-    for(const FormatObject &formatObject : fileFormats)
-    {
-//        typeComboBox->addItem(formatObject.description, QVariant("Parent"));
-//        typeComboBox->setItemData(typeComboBox->count() - 1, formatObject.extensions.first(), Qt::UserRole + 1);
-//        typeComboBox->setItemData(typeComboBox->count() - 1, formatObject.type, Qt::UserRole + 2);
-        QStandardItem* item = new QStandardItem( formatObject.description );
-//        item->setFlags( item->flags() & ~( Qt::ItemIsEnabled | Qt::ItemIsSelectable ) );
-//        item->setFlags( item->flags() & ~( Qt::ItemIsEnabled ) );
-//        item->setData( "parent", Qt::AccessibleDescriptionRole );
-        item->setData(formatObject.extensions.first(), Qt::UserRole + 1);
-        item->setData(formatObject.type, Qt::UserRole + 2);
-        QFont font = item->font();
-        font.setBold( true );
-        font.setItalic( true );
-        item->setSelectable(false);
-        item->setFont( font );
-        model->appendRow( item );
-        for(const QString &extension: formatObject.extensions)
-        {
-            typeComboBox->addItem(extension, QVariant("Child"));
-            typeComboBox->setItemData(typeComboBox->count() - 1, extension, Qt::UserRole + 1);
-            typeComboBox->setItemData(typeComboBox->count() - 1, formatObject.type, Qt::UserRole + 2);
-        }
-    }
-
-    messageBoxLayout->addWidget(hGroup, messageBoxLayout->rowCount()-2, 0);
-    messageBoxLayout->addWidget(checkBox, messageBoxLayout->rowCount()-2, 0);
-
-    hLayout->addWidget(new QLabel("File format:", hGroup));
-    hLayout->addWidget(typeComboBox);
-
-
-    messageBox.exec();
-
-    QString chosenExtension = typeComboBox->itemData(typeComboBox->currentIndex(), Qt::UserRole + 1).toString();
-    QString chosenType = typeComboBox->itemData(typeComboBox->currentIndex(), Qt::UserRole + 2).toString();
-
-    return pair<QString, QString>(chosenType, chosenExtension);
 }

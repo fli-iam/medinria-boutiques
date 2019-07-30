@@ -1,0 +1,10 @@
+{
+	"dataTypeToFormatAndExtension": {
+		"Type 1": ["Format 1", ".ext1"],
+		"Type 2": ["Format 2", ".ext2"]
+	},
+	"preferredFormatsAndExtensions": [
+		["Format 1", ".ext1"],
+		["Format 2", ".ext2"]
+	]
+}

@@ -8,7 +8,6 @@
 #include <QJsonArray>
 #include "searchtoolswidget.h"
 #include "abstractfilehandler.h"
-#include "comboboxdelegate.h"
 #include "dropwidget.h"
 
 QT_BEGIN_NAMESPACE
@@ -41,7 +40,7 @@ class InvocationGUIWidget : public QWidget
     Q_OBJECT
 private:
     SearchToolsWidget *searchToolsWidget;
-    AbstractFileHandler *FileHandler;
+    AbstractFileHandler *fileHandler;
     QVBoxLayout *layout;
     QGroupBox *selectCurrentDirectoryGroupBox;
     QLineEdit *selectCurrentDirectoryLineEdit;
@@ -52,7 +51,7 @@ private:
     QJsonObject *invocationJSON;
     QJsonObject *completeInvocationJSON;
     QJsonArray outputFiles;
-    map<string, InputObject> idToInputObject;
+    map<QString, InputObject> idToInputObject;
     vector<GroupObject> groupObjects;
     bool ignoreSignals;
 
@@ -67,22 +66,18 @@ public:
     void populateDirectories(QJsonObject &invocationJSON, QStringList &directories);
 
 private:
-    bool inputGroupIsMutuallyExclusive(const string &inputId);
-    pair<QGroupBox *, QVBoxLayout *> createGroupAndLayout(const string &name);
-    void valueChanged(const string &inputId);
-    void removeMutuallyExclusiveParameters(const string &inputId);
-    QJsonArray stringToArray(const string &string);
-    QWidget *createUnsetGroup(const string &inputId, QWidget *widget);
+    bool inputGroupIsMutuallyExclusive(const QString &inputId);
+    pair<QGroupBox *, QVBoxLayout *> createGroupAndLayout(const QString &name);
+    void valueChanged(const QString &inputId);
+    void removeMutuallyExclusiveParameters(const QString &inputId);
+    QJsonArray stringToArray(const QString &string);
+    QWidget *createUnsetGroup(const QString &inputId, QWidget *widget);
     void askChangeCurrentDirectory();
     void populateAbsolutePath(const QJsonValue &fileNameValue, QStringList &directories, bool &hasChangedCurrentDirectory);
     void populateInputDirectories(const QJsonObject &invocationJSON, QStringList &directories, bool &hasChangedCurrentDirectory);
     void populateOutputDirectories(const QJsonObject &invocationJSON, QStringList &directories, bool &hasChangedCurrentDirectory);
 
     void createSelectCurrentDirectoryGUI();
-
-    QString createTemporaryInputFileForMimeData(const QMimeData * mimeData);
-    QString createTemporaryInputFileForCurrentInput();
-    pair<QString, QString> getFormatForInputFile(const QList<FormatObject> &fileFormats);
 
 signals:
     void invocationChanged();

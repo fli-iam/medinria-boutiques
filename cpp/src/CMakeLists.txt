@@ -19,7 +19,6 @@ add_executable(${PROJECT_NAME}
     invocationwidget.cpp
     executionwidget.cpp
     toolboxwidget.cpp
-    comboboxdelegate.cpp
     dropwidget.cpp
     abstractfilehandler.cpp
     filehandler.cpp
