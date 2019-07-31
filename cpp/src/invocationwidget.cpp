@@ -35,7 +35,7 @@ QStringList InvocationWidget::setAndGetAbsoluteDirectories()
     QString invocationString = this->invocationEditor->toPlainText();
     QJsonObject invocationJsonAbsolutePath = QJsonDocument::fromJson(invocationString.toUtf8()).object();
 
-    this->invocationGUIWidget->populateDirectories(invocationJsonAbsolutePath, directories);
+    this->invocationGUIWidget->populateDirectoriesAndSetOutputFileName(invocationJsonAbsolutePath, directories);
 
     QJsonDocument document(invocationJsonAbsolutePath);
     QByteArray output = document.toJson(QJsonDocument::Indented);

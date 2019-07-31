@@ -2,7 +2,11 @@
 #define FILEHANDLER_H
 
 #include "abstractfilehandler.h"
-#include "toolboxwidget.h"
+
+#include <QWidget>
+#include <QMimeData>
+#include <QJsonObject>
+#include <QJsonArray>
 
 QT_BEGIN_NAMESPACE
 class medDataIndex;
@@ -10,6 +14,7 @@ class medAbstractData;
 class medBoutiquesToolBox;
 QT_END_NAMESPACE
 
+#define BOUTIQUE_GUI_STANDALONE
 #define PREFERRED_FORMATS_SETTINGS_PATH "../preferredFormats.json"
 
 class FileHandler : public AbstractFileHandler
@@ -18,6 +23,7 @@ private:
     medBoutiquesToolBox *toolbox;
     QJsonObject dataTypeToFormatAndExtension;
     QJsonArray preferredFormatsAndExtensions;
+    QJsonArray outputExtensions;
 
 public:
     FileHandler(medBoutiquesToolBox *toolbox = nullptr);
@@ -25,6 +31,7 @@ public:
     void checkAcceptDragEvent(QDragEnterEvent *event) override;
     QString createTemporaryInputFileForMimeData(const QMimeData *mimeData) override;
     QString createTemporaryInputFileForCurrentInput() override;
+    bool hasKnownExtension(const QString &fileName) override;
 
 private:
     QList<FormatObject> getFileFormatsForData(medAbstractData *data);

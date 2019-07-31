@@ -6,5 +6,6 @@
 	"preferredFormatsAndExtensions": [
 		["Format 1", ".ext1"],
 		["Format 2", ".ext2"]
-	]
+	],
+	"outputExtensions": [".nii.gz", ".vtk"]
 }

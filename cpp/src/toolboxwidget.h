@@ -6,6 +6,8 @@
 #include "invocationguiwidget.h"
 #include "abstractfilehandler.h"
 
+#define BOUTIQUE_GUI_STANDALONE
+
 QT_BEGIN_NAMESPACE
 class medDataIndex;
 class medAbstractData;

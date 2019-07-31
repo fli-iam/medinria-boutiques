@@ -4,6 +4,8 @@
 #include <vector>
 #include <QWidget>
 #include <QProcess>
+#include <QJsonObject>
+#include <QJsonArray>
 
 #define BOSH_PATH "../bosh"
 
@@ -30,6 +32,23 @@ struct SearchResult {
 class SearchToolsWidget : public QWidget
 {
     Q_OBJECT
+
+private:
+    QLineEdit* searchLineEdit;
+    QPushButton* button;
+    QGroupBox* searchGroupBox;
+    QLabel* loadingLabel;
+    QTableWidget* table;
+    QLabel* infoLabel;
+    QTextEdit* info;
+    QProcess* searchProcess;
+    QProcess* pprintProcess;
+    QProcess* pullProcess;
+    std::vector<SearchResult> searchResults;
+    vector<pair<QString, int>> zenodoIdsAndDownloads;
+    bool mustCreateToolDatabase;
+    QJsonArray descriptors;
+
 public:
     explicit SearchToolsWidget(QWidget *parent = nullptr);
 
@@ -38,6 +57,9 @@ public:
 private:
     void createTable();
     void createProcesses();
+    void downloadTools();
+    void createToolDatabase();
+    void loadToolDatabase();
 
 signals:
     void toolSelected();
@@ -50,18 +72,8 @@ public slots:
     void searchProcessStarted();
     void searchProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void pprintProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void pullProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
 
-private:
-    QLineEdit* searchLineEdit;
-    QPushButton* button;
-    QGroupBox* searchGroupBox;
-    QLabel* loadingLabel;
-    QTableWidget* table;
-    QLabel* infoLabel;
-    QTextEdit* info;
-    QProcess* searchProcess;
-    QProcess* pprintProcess;
-    std::vector<SearchResult> searchResults;
 };
 
 #endif // SEARCHTOOLSWIDGET_H

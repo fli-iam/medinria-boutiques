@@ -132,6 +132,8 @@ void ExecutionWidget::executionProcessFinished()
     this->print("Process finished.");
     this->executeButton->show();
     this->cancelButton->hide();
+
+    emit success(this->invocationWidget->invocationGUIWidget->getOutputFileName());
 }
 
 void ExecutionWidget::dataReady()

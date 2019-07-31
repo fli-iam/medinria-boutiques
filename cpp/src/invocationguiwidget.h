@@ -53,6 +53,8 @@ private:
     QJsonArray outputFiles;
     map<QString, InputObject> idToInputObject;
     vector<GroupObject> groupObjects;
+    QString selectedOutputId;
+    QString outputFileName;
     bool ignoreSignals;
 
 public:
@@ -63,7 +65,8 @@ public:
     // Check all input and output paths. Change [CURRENT INPUT] to actual temporary file created for this purpose in QDir::tempPath().
     // If one or more relative paths: open a dialog for the user to select the root directory ; relative paths will be converted to absolute path from this directory
     // Return the list of used directories to mount them (bosh -v option), to make them accessible to docker
-    void populateDirectories(QJsonObject &invocationJSON, QStringList &directories);
+    void populateDirectoriesAndSetOutputFileName(QJsonObject &invocationJSON, QStringList &directories);
+    QString getOutputFileName();
 
 private:
     bool inputGroupIsMutuallyExclusive(const QString &inputId);
@@ -75,9 +78,10 @@ private:
     void askChangeCurrentDirectory();
     void populateAbsolutePath(const QJsonValue &fileNameValue, QStringList &directories, bool &hasChangedCurrentDirectory);
     void populateInputDirectories(const QJsonObject &invocationJSON, QStringList &directories, bool &hasChangedCurrentDirectory);
-    void populateOutputDirectories(const QJsonObject &invocationJSON, QStringList &directories, bool &hasChangedCurrentDirectory);
+    void populateOutputDirectoriesAndSetOutputFileName(const QJsonObject &invocationJSON, QStringList &directories, bool &hasChangedCurrentDirectory);
 
     void createSelectCurrentDirectoryGUI();
+    void toggleOutputFile(QPushButton *toggleOutputPushButton, const QString &inputId);
 
 signals:
     void invocationChanged();

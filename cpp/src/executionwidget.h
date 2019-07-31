@@ -14,6 +14,8 @@ class ExecutionWidget : public QWidget
 public:
     SearchToolsWidget *searchToolsWidget;
     InvocationWidget *invocationWidget;
+
+private:
     QLayout *layout;
     QLabel *generatedCommandLabel;
     QTextEdit *generatedCommand;
@@ -31,6 +33,7 @@ private:
     void print(const QString& text);
 
 signals:
+    void success(const QString outputFileName);
 
 public slots:
     void invocationChanged();

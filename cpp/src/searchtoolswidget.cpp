@@ -4,8 +4,10 @@
 #include <QtWidgets>
 #include "searchtoolswidget.h"
 
+#define BOUTIQUES_CACHE_PATH "/.cache/boutiques"
+#define DATABASE_NAME "all-descriptors.json"
 
-SearchToolsWidget::SearchToolsWidget(QWidget *parent) : QWidget(parent)
+SearchToolsWidget::SearchToolsWidget(QWidget *parent) : QWidget(parent), mustCreateToolDatabase(false)
 {
     this->searchLineEdit = new QLineEdit();
     this->searchLineEdit->setPlaceholderText("Search a tool in Boutiques...");
@@ -73,6 +75,16 @@ void SearchToolsWidget::createProcesses()
 
     this->pprintProcess = new QProcess(this);
     connect(this->pprintProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::pprintProcessFinished);
+
+    this->pullProcess = new QProcess(this);
+    connect(this->pullProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::pullProcessFinished);
+}
+
+void SearchToolsWidget::downloadTools()
+{
+    this->mustCreateToolDatabase = true;
+    this->searchProcess->kill();
+    this->searchProcess->start(BOSH_PATH, {"search", "-m 1000"});
 }
 
 void SearchToolsWidget::selectionChanged()
@@ -102,12 +114,31 @@ void SearchToolsWidget::pprintProcessFinished(int exitCode, QProcess::ExitStatus
 
 void SearchToolsWidget::searchBoutiquesTools()
 {
+    QString searchQuery = this->searchLineEdit->text();
+
+    if(!this->descriptors.isEmpty())
+    {
+        searchResults.clear();
+        for(int i=0 ; i<this->descriptors.size() ; i++)
+        {
+            const QJsonObject &descriptor = this->descriptors.at(i).toObject();
+            const QString &name = descriptor["name"].toString();
+            const QString &description= descriptor["description"].toString();
+            if(name.contains(searchQuery, Qt::CaseInsensitive) || description.contains(searchQuery, Qt::CaseInsensitive))
+            {
+                this->searchResults.emplace_back();
+                SearchResult& searchResult = this->searchResults.back();
+                searchResult.title = name.toStdString();
+                searchResult.description = description.toStdString();
+            }
+        }
+        return;
+    }
     this->loadingLabel->show();
     this->table->hide();
     this->infoLabel->hide();
     this->info->hide();
 
-    QString searchQuery = this->searchLineEdit->text();
 
     this->searchProcess->kill();
     this->searchProcess->start(BOSH_PATH, {"search", "-m 50", searchQuery});
@@ -151,6 +182,11 @@ void SearchToolsWidget::searchProcessFinished(int exitCode, QProcess::ExitStatus
 {
     Q_UNUSED(exitCode)
     Q_UNUSED(exitStatus)
+    if(exitStatus == QProcess::ExitStatus::NormalExit && this->mustCreateToolDatabase)
+    {
+        this->createToolDatabase();
+        return;
+    }
 
     this->loadingLabel->hide();
     this->table->show();
@@ -245,4 +281,106 @@ void SearchToolsWidget::searchProcessFinished(int exitCode, QProcess::ExitStatus
         this->table->setItem(int(i-2), 3, new QTableWidgetItem(QString::fromStdString(to_string(searchResult.downloads))));
 
     }
+}
+
+void SearchToolsWidget::createToolDatabase()
+{
+
+    QString output = QString::fromUtf8(this->searchProcess->readAll());
+
+    regex e("\x1b\[[0-9;]*[mGKF]");
+
+    string outputClean = regex_replace(output.toStdString(), e, "");
+
+    stringstream outputSream(outputClean);
+    string line;
+    vector<string> lines;
+    while (getline(outputSream, line))
+    {
+        lines.push_back(line);
+    }
+    if(lines.size() < 2)
+    {
+        return;
+    }
+
+    line = lines[1];
+    string::size_type idIndex = line.find("ID");
+    string::size_type titleIndex = line.find("TITLE");
+    string::size_type downloadsIndex = line.find("DOWNLOADS");
+    this->table->setRowCount(int(lines.size() - 2));
+
+    searchResults.clear();
+    this->zenodoIdsAndDownloads.clear();
+    for(unsigned int i=2 ; i<lines.size() ; i++){
+        string line = lines[i];
+
+        const QString &zenodoId = QString::fromStdString(trim(line.substr(idIndex, titleIndex - idIndex)));
+        try
+        {
+            int nDownloads = stoi(trim(line.substr(downloadsIndex, line.size() - 1)));
+            this->zenodoIdsAndDownloads.push_back(pair<QString, int>(zenodoId, nDownloads));
+        } catch (const invalid_argument& ia)
+        {
+            Q_UNUSED(ia)
+            continue;
+        }
+
+    }
+
+//    this->zenodoIdsAndDownloads.insert(0, "pull");
+//    this->pullProcess->kill();
+//    this->pullProcess->start(BOSH_PATH, this->zenodoIdsAndDownloads);
+
+}
+
+void SearchToolsWidget::pullProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    Q_UNUSED(exitCode)
+    Q_UNUSED(exitStatus)
+
+    QDir cacheDirectory(QDir::homePath() + BOUTIQUES_CACHE_PATH);
+
+    QJsonArray descriptors;
+    for(const pair<QString, int> &zeonodIdAndDownload : this->zenodoIdsAndDownloads)
+    {
+        QString zenodoId = zeonodIdAndDownload.first;
+        int zenodoDownloads = zeonodIdAndDownload.second;
+        QString descriptorFileName = zenodoId.replace(QChar('.'), QChar('-')) + ".json";
+        QFile file(cacheDirectory.absoluteFilePath(descriptorFileName));
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        {
+            QMessageBox::critical(this, "Could not open descriptor file", "Error while opening descriptor file (" + descriptorFileName + ") from ~" + BOUTIQUES_CACHE_PATH);
+            return;
+        }
+
+        QJsonDocument descriptorDocument(QJsonDocument::fromJson(file.readAll()));
+        QJsonObject descriptorObject = descriptorDocument.object();
+        descriptorObject["id"] = zenodoId;
+        descriptorObject["downloads"] = zenodoDownloads;
+        descriptors.push_back(descriptorObject);
+    }
+
+    QFile descriptorsFile(cacheDirectory.absoluteFilePath(DATABASE_NAME));
+    if (!descriptorsFile.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        QMessageBox::critical(this, "Could not open descriptors file", "Error while opening descriptors file.");
+        return;
+    }
+    QJsonDocument descriptorsDocument(descriptors);
+    descriptorsFile.write(descriptorsDocument.toJson());
+}
+
+void SearchToolsWidget::loadToolDatabase()
+{
+    QDir cacheDirectory(QDir::homePath() + BOUTIQUES_CACHE_PATH);
+
+    QFile file(cacheDirectory.absoluteFilePath(DATABASE_NAME));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        QMessageBox::critical(this, "Could not open descriptor file", "Error while opening descriptors file.");
+        return;
+    }
+    QJsonDocument descriptorsDocument(QJsonDocument::fromJson(file.readAll()));
+    this->descriptors = descriptorsDocument.array();
 }

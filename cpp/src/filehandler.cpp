@@ -1,10 +1,16 @@
 #include "filehandler.h"
 
 #include <QtWidgets>
-//#include "medDataIndex.h"
-//#include "medDataManager.h"
-//#include "medAbstractDataFactory.h"
-//#include "medMessageController.h"
+
+#ifndef BOUTIQUE_GUI_STANDALONE
+
+#include "medDataIndex.h"
+#include "medDataManager.h"
+#include "medAbstractDataFactory.h"
+#include "medMessageController.h"
+#include "medBoutiquesToolBox.h"
+
+#endif
 
 FileHandler::FileHandler(medBoutiquesToolBox *toolbox): toolbox(toolbox)
 {
@@ -24,118 +30,149 @@ FileHandler::FileHandler(medBoutiquesToolBox *toolbox): toolbox(toolbox)
     }
 
     this->preferredFormatsAndExtensions = json["preferredFormatsAndExtensions"].toArray();
+
+    this->outputExtensions = json["outputExtensions"].toArray();
 }
 
 void FileHandler::checkAcceptDragEvent(QDragEnterEvent *event)
 {
+#ifdef BOUTIQUE_GUI_STANDALONE
     event->acceptProposedAction();
-//    const QMimeData *mimeData = event->mimeData();
-//    if (mimeData->hasUrls())
-//    {
-//        event->acceptProposedAction();
-//    }
-//    medDataIndex index = medDataIndex::readMimeData(mimeData);
-//    if (index.isValidForSeries())
-//    {
-//        event->acceptProposedAction();
-//    }
+#else
+    const QMimeData *mimeData = event->mimeData();
+    if (mimeData->hasUrls())
+    {
+        event->acceptProposedAction();
+    }
+    medDataIndex index = medDataIndex::readMimeData(mimeData);
+    if (index.isValidForSeries())
+    {
+        event->acceptProposedAction();
+    }
+#endif
 }
 
 QList<FormatObject> FileHandler::getFileFormatsForData(medAbstractData *data)
 {
+#ifdef BOUTIQUE_GUI_STANDALONE
     Q_UNUSED(data)
     QList<FormatObject> fileFormats;
     fileFormats.push_back(FormatObject("Type 1", "Description 1", {".ext1", ".ext2"}));
     fileFormats.push_back(FormatObject("Type 2", "Description 2", {".ext3", ".ext4"}));
     return fileFormats;
-//    QList<FormatObject> fileFormats;
-//    QList<QString> allWriters = medAbstractDataFactory::instance()->writers();
-//    QHash<QString, dtkAbstractDataWriter*> possibleWriters;
+#else
+    QList<FormatObject> fileFormats;
+    QList<QString> allWriters = medAbstractDataFactory::instance()->writers();
+    QHash<QString, dtkAbstractDataWriter*> possibleWriters;
 
-//    foreach(QString writerType, allWriters) {
-//        dtkAbstractDataWriter * writer = medAbstractDataFactory::instance()->writer(writerType);
-//        if (writer->handled().contains(data->identifier()))
-//            possibleWriters[writerType] = writer;
-//        else
-//            delete writer;
-//    }
+    foreach(QString writerType, allWriters) {
+        dtkAbstractDataWriter * writer = medAbstractDataFactory::instance()->writer(writerType);
+        if (writer->handled().contains(data->identifier()))
+            possibleWriters[writerType] = writer;
+        else
+            delete writer;
+    }
 
-//    if (possibleWriters.isEmpty()) {
-//        medMessageController::instance()->showError("Sorry, we have no exporter for this format.");
-//        return fileFormats;
-//    }
+    if (possibleWriters.isEmpty()) {
+        medMessageController::instance()->showError("Sorry, we have no exporter for this format.");
+        return fileFormats;
+    }
 
-//    // we use allWriters as the list of keys to make sure we traverse possibleWriters
-//    // in the order specified by the writers priorities.
-//    foreach(QString type, allWriters) {
-//        if (!possibleWriters.contains(type))
-//            continue;
+    // we use allWriters as the list of keys to make sure we traverse possibleWriters
+    // in the order specified by the writers priorities.
+    foreach(QString type, allWriters) {
+        if (!possibleWriters.contains(type))
+            continue;
 
-//        QStringList extensions = possibleWriters[type]->supportedFileExtensions();
-//        fileFormats.append(FormatObject(type, possibleWriters[type]->description(), extensions));
-//    }
-//    return fileFormats;
+        QStringList extensions = possibleWriters[type]->supportedFileExtensions();
+        fileFormats.append(FormatObject(type, possibleWriters[type]->description(), extensions));
+    }
+    return fileFormats;
+#endif
 }
 
 FormatAndExtension FileHandler::getFormatAndExtensionForData(medAbstractData *data)
 {
+#ifdef BOUTIQUE_GUI_STANDALONE
     Q_UNUSED(data)
     FormatAndExtension formatAndExtension("Type 1", ".ext1");
     return formatAndExtension;
-//    FormatAndExtension formatAndExtension;
-//    const QString &dataType = data->identifier();
-//    if(this->dataTypeToFormatAndExtension.contains(dataType))
-//    {
-//        formatAndExtension = FormatAndExtension(this->dataTypeToFormatAndExtension[dataType].toArray());
-//    }
-//    else
-//    {
-//        const QList<FormatObject> &fileFormats = this->getFileFormatsForData(data);
-//        bool foundPreferredFormat = false;
-//        for(const auto &formatObject : fileFormats)
-//        {
-//            for(int i = 0 ; i<this->preferredFormatsAndExtensions.size() ; ++i)
-//            {
-//                const QJsonArray &formatAndExtensionArray = this->preferredFormatsAndExtensions.at(i).toArray();
-//                if(formatAndExtensionArray.size() == 2 && formatObject.type == formatAndExtensionArray[0].toString())
-//                {
-//                    formatAndExtension = FormatAndExtension(formatAndExtensionArray);
-//                    foundPreferredFormat = true;
-//                    break;
-//                }
-//            }
-//            if(foundPreferredFormat)
-//            {
-//                break;
-//            }
-//        }
-//        if(!foundPreferredFormat)
-//        {
-//            formatAndExtension = this->getFormatForInputFile(dataType, fileFormats);
-//        }
-//    }
-//    return formatAndExtension;
+#else
+    FormatAndExtension formatAndExtension;
+    const QString &dataType = data->identifier();
+    if(this->dataTypeToFormatAndExtension.contains(dataType))
+    {
+        formatAndExtension = FormatAndExtension(this->dataTypeToFormatAndExtension[dataType].toArray());
+    }
+    else
+    {
+        const QList<FormatObject> &fileFormats = this->getFileFormatsForData(data);
+        bool foundPreferredFormat = false;
+        for(const auto &formatObject : fileFormats)
+        {
+            for(int i = 0 ; i<this->preferredFormatsAndExtensions.size() ; ++i)
+            {
+                const QJsonArray &formatAndExtensionArray = this->preferredFormatsAndExtensions.at(i).toArray();
+                if(formatAndExtensionArray.size() == 2 && formatObject.type == formatAndExtensionArray[0].toString())
+                {
+                    formatAndExtension = FormatAndExtension(formatAndExtensionArray);
+                    foundPreferredFormat = true;
+                    break;
+                }
+            }
+            if(foundPreferredFormat)
+            {
+                break;
+            }
+        }
+        if(!foundPreferredFormat)
+        {
+            formatAndExtension = this->getFormatForInputFile(dataType, fileFormats);
+        }
+    }
+    return formatAndExtension;
+#endif
 }
 
 QString FileHandler::createTemporaryInputFileForMimeData(const QMimeData *mimeData)
 {
+#ifdef BOUTIQUE_GUI_STANDALONE
     Q_UNUSED(mimeData)
     return this->createTemporaryInputFile(nullptr, "Type 2", ".ext2");
-//    medDataIndex index = medDataIndex::readMimeData(mimeData);
-//    if (index.isValidForSeries())
-//    {
-//        medAbstractData *data = medDataManager::instance()->retrieveData(index);
-//        const FormatAndExtension &formatAndExtension = this->getFormatAndExtensionForData(data);
-//        return this->createTemporaryInputFile(data, formatAndExtension.type, formatAndExtension.extension);
-//    }
+#else
+    medDataIndex index = medDataIndex::readMimeData(mimeData);
+    if (index.isValidForSeries())
+    {
+        medAbstractData *data = medDataManager::instance()->retrieveData(index);
+        const FormatAndExtension &formatAndExtension = this->getFormatAndExtensionForData(data);
+        return this->createTemporaryInputFile(data, formatAndExtension.type, formatAndExtension.extension);
+    }
+    return "";
+#endif
 }
 
 QString FileHandler::createTemporaryInputFileForCurrentInput()
 {
+#ifdef BOUTIQUE_GUI_STANDALONE
     return this->createTemporaryInputFile(nullptr, "Type 1", ".ext1");
-//    medAbstractData *data = toolbox->getInput();
-//    const FormatAndExtension &formatAndExtension = this->getFormatAndExtensionForData(data);
-//    return this->createTemporaryInputFile(data, formatAndExtension.type, formatAndExtension.extension);
+#else
+    medAbstractData *data = toolbox->getInput();
+    const FormatAndExtension &formatAndExtension = this->getFormatAndExtensionForData(data);
+    return this->createTemporaryInputFile(data, formatAndExtension.type, formatAndExtension.extension);
+#endif
+}
+
+bool FileHandler::hasKnownExtension(const QString &fileName)
+{
+    for (int i = 0 ; i<this->outputExtensions.size() ; ++i)
+    {
+        const QString &outputExtension = this->outputExtensions[i].toString();
+        if(fileName.endsWith(outputExtension))
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 FormatAndExtension FileHandler::getFormatForInputFile(const QString &dataType, const QList<FormatObject> &fileFormats)
@@ -165,9 +202,8 @@ FormatAndExtension FileHandler::getFormatForInputFile(const QString &dataType, c
     for(const FormatObject &formatObject : fileFormats)
     {
         QStandardItem* item = new QStandardItem( formatObject.description );
-        item->setData( "parent", Qt::AccessibleDescriptionRole );
-        item->setData(formatObject.extensions.first(), Qt::UserRole + 1);
-        item->setData(formatObject.type, Qt::UserRole + 2);
+        item->setData(formatObject.extensions.first(), Qt::UserRole + 0);
+        item->setData(formatObject.type, Qt::UserRole + 1);
         QFont font = item->font();
         font.setBold( true );
         item->setFont( font );
@@ -176,9 +212,9 @@ FormatAndExtension FileHandler::getFormatForInputFile(const QString &dataType, c
         model->appendRow( item );
         for(const QString &extension: formatObject.extensions)
         {
-            typeComboBox->addItem(extension, QVariant("Child"));
-            typeComboBox->setItemData(typeComboBox->count() - 1, extension, Qt::UserRole + 1);
-            typeComboBox->setItemData(typeComboBox->count() - 1, formatObject.type, Qt::UserRole + 2);
+            typeComboBox->addItem(extension);
+            typeComboBox->setItemData(typeComboBox->count() - 1, extension, Qt::UserRole + 0);
+            typeComboBox->setItemData(typeComboBox->count() - 1, formatObject.type, Qt::UserRole + 1);
         }
     }
 
@@ -237,10 +273,12 @@ FormatAndExtension FileHandler::getFormatForInputFile(const QString &dataType, c
 QString FileHandler::createTemporaryInputFile(medAbstractData *data, const QString &chosenType, const QString &chosenExtension)
 {
     Q_UNUSED(data)
-    QTemporaryFile file("XXXXXX" + chosenType + chosenExtension);
+    QTemporaryFile file("XXXXXX_" + chosenType + chosenExtension);
     if (file.open()) {
         QString absoluteFilePath = QFileInfo(file).absoluteFilePath();
-//        medDataManager::instance()->exportDataToPath(data, absoluteFilePath, chosenType);
+#ifndef BOUTIQUE_GUI_STANDALONE
+        medDataManager::instance()->exportDataToPath(data, absoluteFilePath, chosenType);
+#endif
         return absoluteFilePath;
     }
     return "";
@@ -257,6 +295,7 @@ void FileHandler::savePreferredFormatSettings()
     QJsonObject preferredFormats;
     preferredFormats["dataTypeToFormatAndExtension"] = this->dataTypeToFormatAndExtension;
     preferredFormats["preferredFormatsAndExtensions"] = this->preferredFormatsAndExtensions;
+    preferredFormats["outputExtensions"] = this->outputExtensions;
     QJsonDocument document(preferredFormats);
     file.write(document.toJson());
 }
