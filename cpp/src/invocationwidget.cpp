@@ -29,9 +29,8 @@ InvocationWidget::InvocationWidget(QWidget *parent, SearchToolsWidget *searchToo
     connect(this->generateInvocationProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &InvocationWidget::generateInvocationProcessFinished);
 }
 
-QStringList InvocationWidget::setAndGetAbsoluteDirectories()
+void InvocationWidget::setAndGetAbsoluteDirectories(QStringList &directories)
 {
-    QStringList directories;
     QString invocationString = this->invocationEditor->toPlainText();
     QJsonObject invocationJsonAbsolutePath = QJsonDocument::fromJson(invocationString.toUtf8()).object();
 
@@ -40,12 +39,11 @@ QStringList InvocationWidget::setAndGetAbsoluteDirectories()
     QJsonDocument document(invocationJsonAbsolutePath);
     QByteArray output = document.toJson(QJsonDocument::Indented);
     this->invocationEditor->setText(output);
-    return directories;
 }
 
 void InvocationWidget::generateInvocationFile()
 {
-    const SearchResult* tool = this->searchToolsWidget->getSelectedTool();
+    const ToolDescription* tool = this->searchToolsWidget->getSelectedTool();
     if(tool == nullptr)
     {
         return;
@@ -56,7 +54,7 @@ void InvocationWidget::generateInvocationFile()
     {
         args.append("--complete");
     }
-    args.append(tool->id.c_str());
+    args.append(tool->id);
     this->generateInvocationProcess->kill();
     this->generateInvocationProcess->start(BOSH_PATH, args);
 }

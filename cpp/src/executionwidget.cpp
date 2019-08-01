@@ -55,7 +55,7 @@ QString ExecutionWidget::getTemporaryInvocationFile()
 
 void ExecutionWidget::invocationChanged()
 {
-    SearchResult *tool = this->searchToolsWidget->getSelectedTool();
+    ToolDescription *tool = this->searchToolsWidget->getSelectedTool();
 
     if(tool == nullptr)
     {
@@ -64,7 +64,7 @@ void ExecutionWidget::invocationChanged()
     QString temporaryInvocationFilePath = this->getTemporaryInvocationFile();
 
     this->simulationProcess->kill();
-    this->simulationProcess->start(BOSH_PATH, {"exec", "simulate", "-i", temporaryInvocationFilePath.toStdString().c_str(), tool->id.c_str()});
+    this->simulationProcess->start(BOSH_PATH, {"exec", "simulate", "-i", temporaryInvocationFilePath, tool->id});
 }
 
 void ExecutionWidget::simulationProcessFinished()
@@ -75,7 +75,7 @@ void ExecutionWidget::simulationProcessFinished()
 
 void ExecutionWidget::executeTool()
 {
-    SearchResult *tool = this->searchToolsWidget->getSelectedTool();
+    ToolDescription *tool = this->searchToolsWidget->getSelectedTool();
 
     if(tool == nullptr)
     {
@@ -84,13 +84,13 @@ void ExecutionWidget::executeTool()
     QString currentPath = QDir::currentPath();
     QString boshPath = QFileInfo(BOSH_PATH).absoluteFilePath();
 
-    // The current directory changes in "invocationWidget->setAndGetAbsoluteDirectories()"
-    const QStringList &directories = this->invocationWidget->setAndGetAbsoluteDirectories();
+    QStringList directories;
+    this->invocationWidget->setAndGetAbsoluteDirectories(directories);
 
     QString temporaryInvocationFilePath = this->getTemporaryInvocationFile();
 
     this->executionProcess->kill();
-    QStringList args({"exec", "launch", "-s", tool->id.c_str(), temporaryInvocationFilePath.toStdString().c_str()});
+    QStringList args({"exec", "launch", "-s", tool->id, temporaryInvocationFilePath});
 
     for(const QString &directory: directories)
     {

@@ -92,7 +92,7 @@ void InvocationGUIWidget::removeMutuallyExclusiveParameters(const QString &input
     }
 }
 
-QJsonArray InvocationGUIWidget::stringToArray(const QString &string)
+inline QJsonArray InvocationGUIWidget::stringToArray(const QString &string)
 {
     QJsonDocument jsonDocument(QJsonDocument::fromJson(QByteArray::fromStdString("[" + string.toStdString() + "]")));
     return jsonDocument.array();
@@ -283,9 +283,10 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 
     QVBoxLayout *groupLayout = new QVBoxLayout(this->group);
     this->group->setLayout(groupLayout);
-    SearchResult *searchResult = this->searchToolsWidget->getSelectedTool();
+    ToolDescription *searchResult = this->searchToolsWidget->getSelectedTool();
 
-    QString descriptorFileName = QString::fromStdString(searchResult->id).replace(QChar('.'), QChar('-')) + ".json";
+    QString id = QString::fromStdString(searchResult->id.toStdString()); // deep copy the string
+    QString descriptorFileName = id.replace(QChar('.'), QChar('-')) + ".json";
     QDir cacheDirectory(QDir::homePath() + "/.cache/boutiques");
 
     QFile file(cacheDirectory.absoluteFilePath(descriptorFileName));

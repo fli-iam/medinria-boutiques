@@ -26,7 +26,7 @@ private:
 
 public:
     explicit InvocationWidget(QWidget *parent = nullptr, SearchToolsWidget *searchToolsWidget = nullptr, AbstractFileHandler *FileHandler = nullptr);
-    QStringList setAndGetAbsoluteDirectories();
+    void setAndGetAbsoluteDirectories(QStringList &directories);
 
 private:
     void generateInvocationFile();
