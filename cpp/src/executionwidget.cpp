@@ -1,3 +1,4 @@
+#include <iostream>
 #include <regex>
 #include <QtWidgets>
 #include "executionwidget.h"
@@ -63,8 +64,10 @@ void ExecutionWidget::invocationChanged()
     }
     QString temporaryInvocationFilePath = this->getTemporaryInvocationFile();
 
+    cout << "kill simulationProcess" << endl;
     this->simulationProcess->kill();
     this->simulationProcess->start(BOSH_PATH, {"exec", "simulate", "-i", temporaryInvocationFilePath, tool->id});
+    cout << "start simulationProcess" << endl;
 }
 
 void ExecutionWidget::simulationProcessFinished()
@@ -89,7 +92,6 @@ void ExecutionWidget::executeTool()
 
     QString temporaryInvocationFilePath = this->getTemporaryInvocationFile();
 
-    this->executionProcess->kill();
     QStringList args({"exec", "launch", "-s", tool->id, temporaryInvocationFilePath});
 
     for(const QString &directory: directories)
@@ -97,9 +99,11 @@ void ExecutionWidget::executeTool()
         args.push_back("-v");
         args.push_back(directory + ":" + directory);
     }
-    this->executionProcess->kill();
 
+    cout << "kill executionProcess" << endl;
+    this->executionProcess->kill();
     this->executionProcess->start(boshPath, args);
+    cout << "kill executionProcess" << endl;
     this->output->clear();
 
     QDir::setCurrent(currentPath);

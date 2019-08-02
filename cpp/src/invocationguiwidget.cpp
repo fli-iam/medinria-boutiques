@@ -12,6 +12,7 @@ InvocationGUIWidget::InvocationGUIWidget(QWidget *parent, SearchToolsWidget *sea
 {
     this->layout = new QVBoxLayout(this);
     this->setMinimumHeight(750);
+//    this->setSizePolicy(QSizePolicy::Policy::Expanding, QSizePolicy::Policy::MinimumExpanding);
     this->scrollArea = new QScrollArea(this);
 //    this->scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     this->scrollArea->setWidgetResizable(true);
@@ -369,6 +370,8 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         destinationLayouts.push_back(pair<QGroupBox*, QVBoxLayout*>(groupAndLayout.first, groupIsOptional ? optionalInputsGroupAndLayout.second : mainInputsGroupAndLayout.second));
     }
 
+    bool noOptionalInput = true;
+
     for (auto& idAndInputObject: idToInputObject)
     {
         const QString &inputId = idAndInputObject.first;
@@ -380,6 +383,8 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         const QString &inputDescription = inputObject.description["description"].toString();
         const QJsonValue &inputValue = this->invocationJSON->value(inputId);
         bool inputIsOptional = inputObject.description["optional"].toBool();
+
+        noOptionalInput &= !inputIsOptional;
 
         QWidget *widget = nullptr;
         QLayout *parentLayout = nullptr;
@@ -542,13 +547,16 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                     const QJsonArray &choices = inputObject.description["value-choices"].toArray();
                     QComboBox *comboBox = new QComboBox();
                     layout->addWidget(comboBox);
+                    bool isInt = inputObject.description["integer"].toBool();
                     connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [this, inputId](){ this->valueChanged(inputId); });
-                    inputObject.getValue = [comboBox]() { return comboBox->currentText(); };
+                    inputObject.getValue = [comboBox, inputType, isInt]()
+                    {
+                        const QString &text = comboBox->currentText();
+                        return inputType == "String" ? QJsonValue(text) : isInt ? QJsonValue(text.toInt()) : QJsonValue(text.toDouble());
+                    };
                     for(const auto &choice: choices)
                     {
-                        const QString &value = inputType == "String" ?
-                                    choice.toString() :
-                                    QString::number(inputObject.description["integer"].toBool() ? choice.toInt() : choice.toDouble());
+                        const QString &value = inputType == "String" ? choice.toString() : QString::number( isInt ? choice.toInt() : choice.toDouble());
                         comboBox->addItem(value);
                     }
                 }
@@ -714,6 +722,11 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
     }
     groupLayout->addWidget(mainInputsGroupAndLayout.first);
     groupLayout->addWidget(optionalInputsGroupAndLayout.first);
+    groupLayout->addStretch();
+    if(noOptionalInput)
+    {
+        optionalInputGroup->hide();
+    }
 }
 
 bool InvocationGUIWidget::generateCompleteInvocation()

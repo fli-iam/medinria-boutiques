@@ -69,7 +69,7 @@ void SearchToolsWidget::createSearchView()
     this->searchView->setAlternatingRowColors(true);
     this->searchView->setSortingEnabled(true);
 
-    this->searchView->setMinimumHeight(150);
+    this->searchView->setMinimumHeight(300);
     this->searchView->setUniformRowHeights(true);
 //    void QAbstractItemView::selectionChanged(const QItemSelection &selected, const QItemSelection &deselected)
 
@@ -129,6 +129,8 @@ void SearchToolsWidget::createProcesses()
 void SearchToolsWidget::downloadToolDatabase()
 {
     connect(this->toolDatabaseProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::createToolDatabase);
+
+    cout << "start toolDatabaseProcess" << endl;
     this->toolDatabaseProcess->start(BOSH_PATH, {"search", "-m 1000"});
 }
 
@@ -150,6 +152,7 @@ void SearchToolsWidget::selectionChanged()
 
     this->pprintProcess->kill();
     this->pprintProcess->start(BOSH_PATH, {"pprint", tool->id});
+
     this->loadingLabel->setText("Getting tool help...");
 }
 
@@ -158,9 +161,15 @@ void SearchToolsWidget::pprintProcessFinished(int exitCode, QProcess::ExitStatus
     Q_UNUSED(exitCode)
     Q_UNUSED(exitStatus)
 
-//    QByteArray result = this->pprintProcess->readAll();
-    QByteArray result = this->pprintProcess->readAllStandardOutput();
-    this->info->setText(QString::fromUtf8(result));
+    if(exitCode == 0)
+    {
+        QByteArray result = this->pprintProcess->readAllStandardOutput();
+        this->info->setText(QString::fromUtf8(result));
+    }
+    else
+    {
+        this->info->setText("Error while reading the tool description.");
+    }
 
     this->infoLabel->show();
     this->info->show();
@@ -192,7 +201,10 @@ void SearchToolsWidget::searchBoutiquesTools()
     this->info->hide();
 
     QString searchQuery = this->searchLineEdit->text();
+
+    cout << "start searchProcess" << endl;
     this->searchProcess->start(BOSH_PATH, {"search", "-m 50", searchQuery});
+
     this->loadingLabel->setText("Search launched...");
     this->searchResults.clear();
 }
@@ -325,6 +337,8 @@ void SearchToolsWidget::createToolDatabase(int exitCode, QProcess::ExitStatus ex
     }
     disconnect(this->toolDatabaseProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::createToolDatabase);
     connect(this->toolDatabaseProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::pullProcessFinished);
+
+    cout << "start toolDatabaseProcess" << endl;
     this->toolDatabaseProcess->start(BOSH_PATH, args);
 }
 

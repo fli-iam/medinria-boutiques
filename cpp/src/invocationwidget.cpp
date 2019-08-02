@@ -1,3 +1,4 @@
+#include <iostream>
 #include <QtWidgets>
 #include "invocationwidget.h"
 
@@ -55,8 +56,10 @@ void InvocationWidget::generateInvocationFile()
         args.append("--complete");
     }
     args.append(tool->id);
+    cout << "kill generateInvocationProcess" << endl;
     this->generateInvocationProcess->kill();
     this->generateInvocationProcess->start(BOSH_PATH, args);
+    cout << "start generateInvocationProcess" << endl;
 }
 
 void InvocationWidget::generateInvocationProcessFinished()
