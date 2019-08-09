@@ -15,7 +15,7 @@
 FileHandler::FileHandler(medBoutiquesToolBox *toolbox): toolbox(toolbox)
 {
 
-    QFile file(PREFERRED_FORMATS_SETTINGS_PATH);
+    QFile file(BOUTIQUES_GUI_SETTINGS_PATH);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
         return;
@@ -287,7 +287,7 @@ QString FileHandler::createTemporaryInputFile(medAbstractData *data, const QStri
 
 void FileHandler::savePreferredFormatSettings()
 {
-    QFile file(PREFERRED_FORMATS_SETTINGS_PATH);
+    QFile file(BOUTIQUES_GUI_SETTINGS_PATH);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
     {
         return;

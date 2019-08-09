@@ -4,6 +4,7 @@
 
 ToolBoxWidget::ToolBoxWidget(QWidget *parent) : QWidget(parent), fileHandler(new FileHandler())
 {
+#ifdef TEST_DRAGGABLE_INPUTS
     QListWidget *listWidget = new QListWidget(this);
     listWidget->setSelectionMode(QAbstractItemView::SingleSelection);
     listWidget->setDragEnabled(true);
@@ -13,4 +14,5 @@ ToolBoxWidget::ToolBoxWidget(QWidget *parent) : QWidget(parent), fileHandler(new
     QVBoxLayout *layout = new QVBoxLayout();
     layout->addWidget(listWidget);
     this->setLayout(layout);
+#endif
 }

@@ -1,0 +1,15 @@
+{
+    "dataTypeToFormatAndExtension": {
+    },
+    "installed": true,
+    "outputExtensions": [
+        ".nii.gz",
+        ".vtk"
+    ],
+    "preferredFormatsAndExtensions": [
+        [
+            "itkNiftiDataImageWriter",
+            ".nii.gz"
+        ]
+    ]
+}

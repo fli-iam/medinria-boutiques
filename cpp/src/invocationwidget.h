@@ -2,6 +2,7 @@
 #define INVOCATIONWIDGET_H
 
 #include <QWidget>
+#include "configuration.h"
 #include "searchtoolswidget.h"
 #include "invocationguiwidget.h"
 #include "abstractfilehandler.h"

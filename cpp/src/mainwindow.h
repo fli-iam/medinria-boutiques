@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include "configuration.h"
 #include "searchtoolswidget.h"
 #include "invocationwidget.h"
 #include "executionwidget.h"
@@ -19,6 +20,9 @@ public:
 //    QLayout *layout;
 
 private:
+    void checkBoutiquesInstallation();
+    void installBoutiques(QJsonObject *settings = nullptr);
+    void setBoutiquesInstalled(QJsonObject *settings);
 
 public:
     MainWindow(QWidget *parent = 0);

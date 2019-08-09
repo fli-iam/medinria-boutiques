@@ -2,6 +2,7 @@
 #define DROPWIDGET_H
 
 #include <QWidget>
+#include "configuration.h"
 
 class DropWidget : public QWidget
 {

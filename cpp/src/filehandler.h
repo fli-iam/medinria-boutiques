@@ -7,15 +7,13 @@
 #include <QMimeData>
 #include <QJsonObject>
 #include <QJsonArray>
+#include "configuration.h"
 
 QT_BEGIN_NAMESPACE
 class medDataIndex;
 class medAbstractData;
 class medBoutiquesToolBox;
 QT_END_NAMESPACE
-
-#define BOUTIQUE_GUI_STANDALONE
-#define PREFERRED_FORMATS_SETTINGS_PATH "../preferredFormats.json"
 
 class FileHandler : public AbstractFileHandler
 {

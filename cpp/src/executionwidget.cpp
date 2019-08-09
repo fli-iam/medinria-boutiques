@@ -56,6 +56,13 @@ QString ExecutionWidget::getTemporaryInvocationFile()
 
 void ExecutionWidget::invocationChanged()
 {
+    if(this->simulationProcess->state() != QProcess::NotRunning)
+    {
+        this->simulationProcess->kill();
+        QTimer::singleShot(100, this, &ExecutionWidget::invocationChanged);
+        return;
+    }
+
     ToolDescription *tool = this->searchToolsWidget->getSelectedTool();
 
     if(tool == nullptr)
@@ -64,10 +71,7 @@ void ExecutionWidget::invocationChanged()
     }
     QString temporaryInvocationFilePath = this->getTemporaryInvocationFile();
 
-    cout << "kill simulationProcess" << endl;
-    this->simulationProcess->kill();
     this->simulationProcess->start(BOSH_PATH, {"exec", "simulate", "-i", temporaryInvocationFilePath, tool->id});
-    cout << "start simulationProcess" << endl;
 }
 
 void ExecutionWidget::simulationProcessFinished()
@@ -78,6 +82,14 @@ void ExecutionWidget::simulationProcessFinished()
 
 void ExecutionWidget::executeTool()
 {
+
+    if(this->executionProcess->state() != QProcess::NotRunning)
+    {
+        this->executionProcess->kill();
+        QTimer::singleShot(100, this, &ExecutionWidget::executeTool);
+        return;
+    }
+
     ToolDescription *tool = this->searchToolsWidget->getSelectedTool();
 
     if(tool == nullptr)
@@ -100,10 +112,7 @@ void ExecutionWidget::executeTool()
         args.push_back(directory + ":" + directory);
     }
 
-    cout << "kill executionProcess" << endl;
-    this->executionProcess->kill();
     this->executionProcess->start(boshPath, args);
-    cout << "kill executionProcess" << endl;
     this->output->clear();
 
     QDir::setCurrent(currentPath);

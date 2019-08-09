@@ -2,6 +2,7 @@
 #define EXECUTIONWIDGET_H
 
 #include <QWidget>
+#include "configuration.h"
 #include "searchtoolswidget.h"
 #include "invocationwidget.h"
 

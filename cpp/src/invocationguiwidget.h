@@ -6,6 +6,7 @@
 #include <QWidget>
 #include <QJsonObject>
 #include <QJsonArray>
+#include "configuration.h"
 #include "searchtoolswidget.h"
 #include "abstractfilehandler.h"
 #include "dropwidget.h"

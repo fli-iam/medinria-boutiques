@@ -6,8 +6,7 @@
 #include <QProcess>
 #include <QJsonObject>
 #include <QJsonArray>
-
-#define BOSH_PATH "../bosh"
+#include "configuration.h"
 
 QT_BEGIN_NAMESPACE
 class QVBoxLayout;
@@ -54,6 +53,7 @@ private:
     vector<ToolDescription> allTools;
     QJsonArray descriptors;
     bool toolDatabaseUpdated;
+    bool ignorePPrintError;
 
 public:
     explicit SearchToolsWidget(QWidget *parent = nullptr);

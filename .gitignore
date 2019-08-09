@@ -3,6 +3,8 @@ cpp/src/CMakeLists.txt.userx
 cpp/src/*.autosave
 cpp/build*
 cpp/medInriaPlugin
+cpp/python
+cpp/vc_redist.x86.exe
 python/bin/
 python/include/
 python/lib/

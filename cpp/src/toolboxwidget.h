@@ -3,15 +3,16 @@
 
 #include <QWidget>
 #include <QMimeData>
+#include "configuration.h"
 #include "invocationguiwidget.h"
 #include "abstractfilehandler.h"
-
-#define BOUTIQUE_GUI_STANDALONE
 
 QT_BEGIN_NAMESPACE
 class medDataIndex;
 class medAbstractData;
 QT_END_NAMESPACE
+
+// ToolboxWidget simulates the root widget in mediaInria boutique plugin
 
 class ToolBoxWidget : public QWidget
 {

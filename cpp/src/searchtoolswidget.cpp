@@ -1,13 +1,15 @@
 #include <iostream>
 #include <string>
 #include <regex>
+#include <chrono>
+#include <thread>
 #include <QtWidgets>
 #include "searchtoolswidget.h"
 
 #define BOUTIQUES_CACHE_PATH "/.cache/boutiques"
 #define DATABASE_NAME "all-descriptors.json"
 
-SearchToolsWidget::SearchToolsWidget(QWidget *parent) : QWidget(parent), toolDatabaseUpdated(false)
+SearchToolsWidget::SearchToolsWidget(QWidget *parent) : QWidget(parent), toolDatabaseUpdated(false), ignorePPrintError(false)
 {
     this->searchLineEdit = new QLineEdit();
     this->searchLineEdit->setPlaceholderText("Search a tool in Boutiques...");
@@ -150,7 +152,15 @@ void SearchToolsWidget::selectionChanged()
         return;
     }
 
-    this->pprintProcess->kill();
+    if(this->pprintProcess->state() != QProcess::NotRunning)
+    {
+        this->ignorePPrintError = true;
+        this->pprintProcess->kill();
+        QTimer::singleShot(100, this, &SearchToolsWidget::selectionChanged);
+        return;
+    }
+
+    this->ignorePPrintError = false;
     this->pprintProcess->start(BOSH_PATH, {"pprint", tool->id});
 
     this->loadingLabel->setText("Getting tool help...");
@@ -168,7 +178,10 @@ void SearchToolsWidget::pprintProcessFinished(int exitCode, QProcess::ExitStatus
     }
     else
     {
-        this->info->setText("Error while reading the tool description.");
+        if(!this->ignorePPrintError)
+        {
+            this->info->setText("Error while reading the tool description.");
+        }
     }
 
     this->infoLabel->show();
@@ -178,8 +191,6 @@ void SearchToolsWidget::pprintProcessFinished(int exitCode, QProcess::ExitStatus
 
 void SearchToolsWidget::searchBoutiquesTools()
 {
-    this->searchProcess->kill();
-
     if(this->toolDatabaseUpdated)
     {
         this->loadToolDatabase();
@@ -191,6 +202,13 @@ void SearchToolsWidget::searchBoutiquesTools()
     if(!this->descriptors.isEmpty())
     {
         // If descriptors are not empty: the tool database was loaded, all tools are added in the model and filtered while typing: do nothing when user hits enter.
+        return;
+    }
+
+    if(this->searchProcess->state() != QProcess::NotRunning)
+    {
+        this->searchProcess->kill();
+        QTimer::singleShot(100, this, &SearchToolsWidget::searchBoutiquesTools);
         return;
     }
 
@@ -338,7 +356,6 @@ void SearchToolsWidget::createToolDatabase(int exitCode, QProcess::ExitStatus ex
     disconnect(this->toolDatabaseProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::createToolDatabase);
     connect(this->toolDatabaseProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::pullProcessFinished);
 
-    cout << "start toolDatabaseProcess" << endl;
     this->toolDatabaseProcess->start(BOSH_PATH, args);
 }
 

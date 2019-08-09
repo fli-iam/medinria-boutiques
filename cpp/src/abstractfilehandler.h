@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QMimeData>
+#include "configuration.h"
 
 struct FormatAndExtension {
     QString type;

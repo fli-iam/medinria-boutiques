@@ -44,6 +44,13 @@ void InvocationWidget::setAndGetAbsoluteDirectories(QStringList &directories)
 
 void InvocationWidget::generateInvocationFile()
 {
+    if(this->generateInvocationProcess->state() != QProcess::NotRunning)
+    {
+        this->generateInvocationProcess->kill();
+        QTimer::singleShot(100, this, &InvocationWidget::generateInvocationFile);
+        return;
+    }
+
     const ToolDescription* tool = this->searchToolsWidget->getSelectedTool();
     if(tool == nullptr)
     {
@@ -56,10 +63,7 @@ void InvocationWidget::generateInvocationFile()
         args.append("--complete");
     }
     args.append(tool->id);
-    cout << "kill generateInvocationProcess" << endl;
-    this->generateInvocationProcess->kill();
     this->generateInvocationProcess->start(BOSH_PATH, args);
-    cout << "start generateInvocationProcess" << endl;
 }
 
 void InvocationWidget::generateInvocationProcessFinished()
