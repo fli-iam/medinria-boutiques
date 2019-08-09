@@ -118,12 +118,13 @@ void SearchToolsWidget::createSearchView()
 void SearchToolsWidget::createProcesses()
 {
     this->searchProcess = new QProcess(this);
-    connect(this->searchProcess, &QProcess::errorOccurred, this, &SearchToolsWidget::errorOccurred);
     connect(this->searchProcess, &QProcess::started, this, &SearchToolsWidget::searchProcessStarted);
     connect(this->searchProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::searchProcessFinished);
+    connect(this->searchProcess, &QProcess::errorOccurred, this, &SearchToolsWidget::errorOccurred);
 
     this->pprintProcess = new QProcess(this);
     connect(this->pprintProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::pprintProcessFinished);
+    connect(this->pprintProcess, &QProcess::errorOccurred, this, &SearchToolsWidget::errorOccurred);
 
     this->toolDatabaseProcess = new QProcess(this);
 }
@@ -132,8 +133,7 @@ void SearchToolsWidget::downloadToolDatabase()
 {
     connect(this->toolDatabaseProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::createToolDatabase);
 
-    cout << "start toolDatabaseProcess" << endl;
-    this->toolDatabaseProcess->start(BOSH_PATH, {"search", "-m 1000"});
+    this->toolDatabaseProcess->start(BoutiquesPaths::Python(), {BoutiquesPaths::Bosh(), "search", "-m 1000"});
 }
 
 void SearchToolsWidget::searchChanged()
@@ -161,7 +161,8 @@ void SearchToolsWidget::selectionChanged()
     }
 
     this->ignorePPrintError = false;
-    this->pprintProcess->start(BOSH_PATH, {"pprint", tool->id});
+
+    this->pprintProcess->start(BoutiquesPaths::Python(), {BoutiquesPaths::Bosh(), "pprint", tool->id});
 
     this->loadingLabel->setText("Getting tool help...");
 }
@@ -220,8 +221,7 @@ void SearchToolsWidget::searchBoutiquesTools()
 
     QString searchQuery = this->searchLineEdit->text();
 
-    cout << "start searchProcess" << endl;
-    this->searchProcess->start(BOSH_PATH, {"search", "-m 50", searchQuery});
+    this->searchProcess->start(BoutiquesPaths::Python(), {BoutiquesPaths::Bosh(), "search", "-m 50", searchQuery});
 
     this->loadingLabel->setText("Search launched...");
     this->searchResults.clear();
@@ -230,7 +230,7 @@ void SearchToolsWidget::searchBoutiquesTools()
 void SearchToolsWidget::errorOccurred(QProcess::ProcessError error)
 {
     Q_UNUSED(error)
-    this->loadingLabel->setText("An error occurred while searching the tool.");
+    this->loadingLabel->setText("An error occurred while searching or reading the tool.");
 }
 
 void SearchToolsWidget::searchProcessStarted()
@@ -348,6 +348,7 @@ void SearchToolsWidget::createToolDatabase(int exitCode, QProcess::ExitStatus ex
     this->parseSearchResults(lines, this->allTools);
 
     QStringList args;
+    args.push_back(BoutiquesPaths::Bosh());
     args.push_back("pull");
     for(unsigned int i=0 ; i<this->allTools.size() ; i++){
         const ToolDescription &tool = this->allTools[i];
@@ -356,7 +357,7 @@ void SearchToolsWidget::createToolDatabase(int exitCode, QProcess::ExitStatus ex
     disconnect(this->toolDatabaseProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::createToolDatabase);
     connect(this->toolDatabaseProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::pullProcessFinished);
 
-    this->toolDatabaseProcess->start(BOSH_PATH, args);
+    this->toolDatabaseProcess->start(BoutiquesPaths::Python(), args);
 }
 
 void SearchToolsWidget::pullProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)

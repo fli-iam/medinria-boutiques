@@ -1,21 +1,58 @@
 #ifndef CONFIGURATION_H
 #define CONFIGURATION_H
 
+#include <QtGlobal>
+#include <QCoreApplication>
+#include <QString>
+#include <QDir>
+
 #define BOUTIQUE_GUI_STANDALONE
 //#define TEST_DRAGGABLE_INPUTS
 
 #ifdef BOUTIQUE_GUI_STANDALONE
-#define BOUTIQUES_DIRECTORY "../"
+#define BOUTIQUES_DIRECTORY "/../"
 #else
-#define BOUTIQUES_DIRECTORY "BoutiquesGUI/"
+#define BOUTIQUES_DIRECTORY "/BoutiquesGUI/"
 #endif
 
-#define BOUTIQUES_GUI_SETTINGS_PATH BOUTIQUES_DIRECTORY "boutiques-gui-settings.json"
 
-#ifndef Q_OS_WINDOWS
-#define BOSH_PATH BOUTIQUES_DIRECTORY "bosh"
+#ifndef Q_OS_WIN
+#define PYTHON_PATH "python"
 #else
-#define BOSH_PATH BOUTIQUES_DIRECTORY "\"python/python.exe\" python/bosh.py"
+#define PYTHON_PATH "python/python.exe"
 #endif
+
+#define BOUTIQUES_GUI_SETTINGS_PATH "boutiques-gui-settings.json"
+#define DOCKER_PATH "docker"
+#define BOSH_PATH "boutiques/bosh.py"
+#define VCREDIS_PATH "vc_redist.x86.exe"
+
+class BoutiquesPaths {
+public:
+    static QString Boutiques() {
+        return QDir(QCoreApplication::applicationDirPath() + BOUTIQUES_DIRECTORY).absolutePath();
+    }
+
+    static QString Settings() {
+        return QFileInfo(QCoreApplication::applicationDirPath() + BOUTIQUES_DIRECTORY + BOUTIQUES_GUI_SETTINGS_PATH).absoluteFilePath();
+    }
+
+    static QString Python() {
+#ifndef Q_OS_WIN
+        return PYTHON_PATH;
+#else
+        return "\"" + QFileInfo(QCoreApplication::applicationDirPath() + BOUTIQUES_DIRECTORY + PYTHON_PATH).absoluteFilePath() + "\"";
+#endif
+    }
+    static QString Bosh() {
+        return QFileInfo(QCoreApplication::applicationDirPath() + BOUTIQUES_DIRECTORY + BOSH_PATH).absoluteFilePath();
+    }
+    static QString Docker() {
+        return DOCKER_PATH;
+    }
+    static QString VCRedis() {
+        return QFileInfo(QCoreApplication::applicationDirPath() + BOUTIQUES_DIRECTORY + VCREDIS_PATH).absoluteFilePath();
+    }
+};
 
 #endif // CONFIGURATION_H

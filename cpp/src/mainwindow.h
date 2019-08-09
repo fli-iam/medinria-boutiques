@@ -23,6 +23,8 @@ private:
     void checkBoutiquesInstallation();
     void installBoutiques(QJsonObject *settings = nullptr);
     void setBoutiquesInstalled(QJsonObject *settings);
+    bool isPythonWorking(const QString &version = "");
+    bool isDockerWorking();
 
 public:
     MainWindow(QWidget *parent = 0);

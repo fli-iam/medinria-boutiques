@@ -727,6 +727,8 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
     {
         optionalInputGroup->hide();
     }
+
+    this->emitInvocationChanged();
 }
 
 bool InvocationGUIWidget::generateCompleteInvocation()

@@ -71,7 +71,7 @@ void ExecutionWidget::invocationChanged()
     }
     QString temporaryInvocationFilePath = this->getTemporaryInvocationFile();
 
-    this->simulationProcess->start(BOSH_PATH, {"exec", "simulate", "-i", temporaryInvocationFilePath, tool->id});
+    this->simulationProcess->start(BoutiquesPaths::Python(), {BoutiquesPaths::Bosh(), "exec", "simulate", "-i", temporaryInvocationFilePath, tool->id});
 }
 
 void ExecutionWidget::simulationProcessFinished()
@@ -97,14 +97,13 @@ void ExecutionWidget::executeTool()
         return;
     }
     QString currentPath = QDir::currentPath();
-    QString boshPath = QFileInfo(BOSH_PATH).absoluteFilePath();
 
     QStringList directories;
     this->invocationWidget->setAndGetAbsoluteDirectories(directories);
 
     QString temporaryInvocationFilePath = this->getTemporaryInvocationFile();
 
-    QStringList args({"exec", "launch", "-s", tool->id, temporaryInvocationFilePath});
+    QStringList args({BoutiquesPaths::Bosh(), "exec", "launch", "-s", tool->id, temporaryInvocationFilePath});
 
     for(const QString &directory: directories)
     {
@@ -112,7 +111,7 @@ void ExecutionWidget::executeTool()
         args.push_back(directory + ":" + directory);
     }
 
-    this->executionProcess->start(boshPath, args);
+    this->executionProcess->start(BoutiquesPaths::Python(), args);
     this->output->clear();
 
     QDir::setCurrent(currentPath);

@@ -1,5 +1,6 @@
 #include "filehandler.h"
 
+#include <iostream>
 #include <QtWidgets>
 
 #ifndef BOUTIQUE_GUI_STANDALONE
@@ -14,8 +15,7 @@
 
 FileHandler::FileHandler(medBoutiquesToolBox *toolbox): toolbox(toolbox)
 {
-
-    QFile file(BOUTIQUES_GUI_SETTINGS_PATH);
+    QFile file(BoutiquesPaths::Settings());
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
         return;
@@ -287,7 +287,7 @@ QString FileHandler::createTemporaryInputFile(medAbstractData *data, const QStri
 
 void FileHandler::savePreferredFormatSettings()
 {
-    QFile file(BOUTIQUES_GUI_SETTINGS_PATH);
+    QFile file(BoutiquesPaths::Settings());
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
     {
         return;

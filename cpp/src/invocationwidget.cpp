@@ -57,13 +57,13 @@ void InvocationWidget::generateInvocationFile()
         return;
     }
 
-    QStringList args({"example"});
+    QStringList args({BoutiquesPaths::Bosh(), "example"});
     if(this->invocationGUIWidget->generateCompleteInvocation())
     {
         args.append("--complete");
     }
     args.append(tool->id);
-    this->generateInvocationProcess->start(BOSH_PATH, args);
+    this->generateInvocationProcess->start(BoutiquesPaths::Python(), args);
 }
 
 void InvocationWidget::generateInvocationProcessFinished()

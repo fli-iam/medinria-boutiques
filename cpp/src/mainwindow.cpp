@@ -2,12 +2,6 @@
 #include <QtWidgets>
 #include "mainwindow.h"
 
-#define VCREDIS BOUTIQUES_DIRECTORY "vc_redist.x86.exe"
-#define WINPYTHON BOUTIQUES_DIRECTORY "WinPython32-3.7.1.0Zero.exe"
-#define PYTHON "python"
-#define PIP "pip"
-#define DOCKER "docker"
-
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
@@ -49,7 +43,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::checkBoutiquesInstallation()
 {
-    QFile file(BOUTIQUES_GUI_SETTINGS_PATH);
+    QFile file(BoutiquesPaths::Settings());
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
         file.close();
@@ -69,7 +63,7 @@ void MainWindow::checkBoutiquesInstallation()
 
 void MainWindow::setBoutiquesInstalled(QJsonObject *settings)
 {
-    QFile file(BOUTIQUES_GUI_SETTINGS_PATH);
+    QFile file(BoutiquesPaths::Settings());
     if (file.open(QIODevice::WriteOnly | QIODevice::Text))
     {
         if(settings != nullptr)
@@ -88,90 +82,70 @@ void MainWindow::setBoutiquesInstalled(QJsonObject *settings)
     }
 }
 
+bool MainWindow::isPythonWorking(const QString &version)
+{
+    QProcess pythonProcess(this);
+    pythonProcess.start(BoutiquesPaths::Python(), {"--version"});
+    pythonProcess.waitForFinished();
+    QString output = QString::fromUtf8(pythonProcess.readAllStandardOutput());
+    QString error = QString::fromUtf8(pythonProcess.readAllStandardError());
+    QString pythonVersion = "Python " + version;
+    return output.contains(pythonVersion) || error.contains(pythonVersion);
+}
+
+bool MainWindow::isDockerWorking()
+{
+    QProcess dockerProcess(this);
+    dockerProcess.start(BoutiquesPaths::Docker(), {"--version"});
+    dockerProcess.waitForFinished();
+    QString output = QString::fromUtf8(dockerProcess.readAllStandardOutput());
+    QString error = QString::fromUtf8(dockerProcess.readAllStandardError());
+    QString dockerVersion = "Docker version";
+    return output.contains(dockerVersion) || error.contains(dockerVersion);
+}
+
 void MainWindow::installBoutiques(QJsonObject *settings)
 {
+    bool pythonAndDockerAreWorking = true;
+
     if (QSysInfo::productType() == "winrt" || QSysInfo::productType() == "windows") {
-        QProcess installVisualStudioRedistributableProcess(this);
-        installVisualStudioRedistributableProcess.start(VCREDIS, {"\\q"});
 
-        if (!installVisualStudioRedistributableProcess.waitForFinished())
+        if(!this->isPythonWorking("3"))
         {
-            QMessageBox::critical(this, "Could not install Microsoft Visual C++ Redistributable for Visual Studio", "Error while installing Microsoft Visual C++ Redistributable for Visual Studio.\nThis software is required to run python3 and boutiques under windows.\n\nTry to install it manually.");
-        }
+            // Install visual studio redistributable
 
-        QProcess winPythonProcess(this);
-        winPythonProcess.start(WINPYTHON, {"/VERYSILENT", "/DIR=" + QDir::toNativeSeparators(QDir::currentPath() + "/python")});
+            QProcess installVisualStudioRedistributableProcess(this);
+            installVisualStudioRedistributableProcess.start(BoutiquesPaths::VCRedis(), {"\\q"});
 
-        if (!winPythonProcess.waitForFinished() || winPythonProcess.exitCode() == 2)
-        {
-            QMessageBox::critical(this, "Could not install pip", "Error while installing pip.\nThis software is required to install boutiques.\n\nTry to install it manually.");
-        }
-
-        QProcess pipProcess(this);
-        pipProcess.start(PIP, {"install", "boutiques"});
-
-        if (!pipProcess.waitForFinished())
-        {
-            QMessageBox::critical(this, "Could not install boutiques", "Error while installing boutiques.\nThis software is required, try to install it manually.");
-        }
-        else
-        {
-            QProcess dockerProcess(this);
-            dockerProcess.start(DOCKER, {"-v"});
-
-            if (!dockerProcess.waitForFinished())
+            if (!installVisualStudioRedistributableProcess.waitForFinished())
             {
-                QMessageBox::warning(this, "Could not run Docker", "Error while testing Docker.\nInstall Docker or Singularity to run boutiques tools.");
+                pythonAndDockerAreWorking = false;
+                QMessageBox::critical(this, "Could not install Microsoft Visual C++ Redistributable for Visual Studio", "Error while installing Microsoft Visual C++ Redistributable for Visual Studio.\nThis software is required to run python3 and boutiques under windows.\n\nTry to install it manually.");
             }
-            else
+            else if(!this->isPythonWorking("3"))
             {
-                this->setBoutiquesInstalled(settings);
+                pythonAndDockerAreWorking = false;
+                QMessageBox::critical(this, "Python is not working", "Python.exe (" + BoutiquesPaths::Python() + ") is not working.\n\nYou need a working python3 version at this location to run boutiques tools.");
             }
         }
 
     } else {
 
-        QProcess pipProcess(this);
-
-        pipProcess.start(PIP, {"-v"});
-
-        if (!pipProcess.waitForFinished())
+        if(!this->isPythonWorking())
         {
-            QProcess pythonProcess(this);
-            pythonProcess.start(PYTHON, {BOUTIQUES_DIRECTORY "get-pip.py"});
-
-            if (!pythonProcess.waitForFinished() || pythonProcess.exitCode() == 2)
-            {
-                QByteArray result = pythonProcess.readAll();
-                QMessageBox::critical(this, "Could not install pip", "Error while installing pip. This software is required to install boutiques. Try to install it manually.");
-            }
+            pythonAndDockerAreWorking = false;
+            QMessageBox::critical(this, "Could not run Python", "Error while testing Python.\nInstall python 2.7 or 3 to run boutiques tools.");
         }
+    }
 
-        pipProcess.start(PIP, {"install", "boutiques"});
+    if (!this->isDockerWorking())
+    {
+        pythonAndDockerAreWorking = false;
+        QMessageBox::critical(this, "Could not run Docker", "Error while testing Docker.\nInstall Docker or Singularity to run boutiques tools.");
+    }
 
-        if (!pipProcess.waitForFinished())
-        {
-            QMessageBox::critical(this, "Could not install boutiques", "Error while installing boutiques. This software is required, try to install it manually.");
-        }
-
-        pipProcess.start("bosh");
-        if (!pipProcess.waitForFinished())
-        {
-            QMessageBox::critical(this, "Could not run boutiques", "Error while testing boutiques. This software is required, try to install it manually.");
-        }
-        else
-        {
-            QProcess dockerProcess(this);
-            dockerProcess.start(DOCKER, {"-v"});
-
-            if (!dockerProcess.waitForFinished())
-            {
-                QMessageBox::warning(this, "Could not run Docker", "Error while testing Docker.\nInstall Docker or Singularity to run boutiques tools.");
-            }
-            else
-            {
-                this->setBoutiquesInstalled(settings);
-            }
-        }
+    if(pythonAndDockerAreWorking)
+    {
+        this->setBoutiquesInstalled(settings);
     }
 }

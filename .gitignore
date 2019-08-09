@@ -4,6 +4,8 @@ cpp/src/*.autosave
 cpp/build*
 cpp/medInriaPlugin
 cpp/python
+cpp/boutiques/boutiques-python2
+cpp/boutiques/boutiques-python3
 cpp/vc_redist.x86.exe
 python/bin/
 python/include/
