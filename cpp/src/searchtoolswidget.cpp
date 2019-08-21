@@ -11,11 +11,11 @@
 
 SearchToolsWidget::SearchToolsWidget(QWidget *parent) : QWidget(parent), toolDatabaseUpdated(false), ignorePPrintError(false)
 {
+    // Create the search input
     this->searchLineEdit = new QLineEdit();
     this->searchLineEdit->setPlaceholderText("Search a tool in Boutiques...");
     this->button = new QPushButton("Search");
 
-//    Search input
     this->searchGroupBox = new QGroupBox();
     QHBoxLayout *searchLayout = new QHBoxLayout();
     searchLayout->addWidget(this->searchLineEdit);
@@ -24,8 +24,11 @@ SearchToolsWidget::SearchToolsWidget(QWidget *parent) : QWidget(parent), toolDat
 
     this->loadingLabel = new QLabel("Loading...");
     this->loadingLabel->hide();
+
+    // Create the tool model and the search view
     this->createSearchView();
 
+    // Create the info text area for the tool description
     this->infoLabel = new QLabel("Tool info");
     this->infoLabel->hide();
     this->info = new QTextEdit();
@@ -33,50 +36,88 @@ SearchToolsWidget::SearchToolsWidget(QWidget *parent) : QWidget(parent), toolDat
     this->info->setReadOnly(true);
     this->info->hide();
 
+    // Create the layout
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(this->searchGroupBox);
     layout->addWidget(this->loadingLabel);
-//    layout->addWidget(this->table);
     layout->addWidget(this->searchView);
     layout->addWidget(this->infoLabel);
     layout->addWidget(this->info);
     this->setLayout(layout);
 
+    // Connect signals
     connect(this->button, &QPushButton::clicked, this, &SearchToolsWidget::searchBoutiquesTools);
-
     connect(this->searchLineEdit, &QLineEdit::textChanged, this, &SearchToolsWidget::searchChanged);
     connect(this->searchLineEdit, &QLineEdit::returnPressed, this, &SearchToolsWidget::searchBoutiquesTools);
 
+    // Create search, pprint and loadToolDatabase processes
     this->createProcesses();
+    // Load tool database (if any)
     this->loadToolDatabase();
+
+    // Download the entire tool database from zenodo once at the startup (search and pull the 1000 first boutiques tools on zenodo),
+    // so that the database (the file "~/.cache/boutiques/all-descriptors.json") remains up-to-date.
+    // This is useful to keep BoutiquesGUI working when the zenodo database is down (we can then rely on the data stored in "all-descriptors.json"),
+    // and to get instantaneous search result.
+    // This process is executed on the background, and updates the database
+    // once all descriptors are pulled from Zenodo.
     this->downloadToolDatabase();
 }
 
 ToolDescription *SearchToolsWidget::getSelectedTool()
 {
-//    int currentRow = this->table->currentRow();
+    // Get selected tool from the search view index (which must be converted from the proxy model index to the tool model index)
+    // return the selected tool description, or nullptr if no result correponds to the index
     int currentRow = this->proxyToolModel->mapToSource(this->searchView->currentIndex()).row();
     int currentToolIndex = this->toolModel->index(currentRow, 0).data(Qt::UserRole).toInt();
     return currentToolIndex >= 0 && currentToolIndex < int(this->searchResults.size()) ? &this->searchResults[static_cast<unsigned int>(currentToolIndex)] : nullptr;
 }
 
+const QJsonObject SearchToolsWidget::getSelectedToolDescriptor()
+{
+    ToolDescription *searchResult = this->getSelectedTool();
+
+    // If the tool is in the database ("~/.cache/boutiques/all-descriptors.json"): return it
+    if(this->descriptors.contains(searchResult->id))
+    {
+        return this->descriptors[searchResult->id].toObject();
+    }
+
+    // Otherwise: return the "~/.cache/boutiques/zenodo-TOOL_ID.json" file (if openable, otherwise return an empty QJsonObject)
+    QString id = QString::fromStdString(searchResult->id.toStdString()); // deep copy the string to modify it
+
+    QString descriptorFileName = id.replace(QChar('.'), QChar('-')) + ".json";
+    QDir cacheDirectory(QDir::homePath() + "/.cache/boutiques");
+
+    QFile file(cacheDirectory.absoluteFilePath(descriptorFileName));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        QMessageBox::critical(this, "Could not open descriptor file", "Error while opening descriptor file (" + descriptorFileName + ") from ~/.cache/boutiques ");
+        return QJsonObject();
+    }
+
+    QJsonDocument jsonDocument(QJsonDocument::fromJson(file.readAll()));
+
+    return jsonDocument.object();
+}
+
 void SearchToolsWidget::createSearchView()
 {
+    // Create the proxy tool model
     this->proxyToolModel = new QSortFilterProxyModel();
     this->proxyToolModel->setFilterKeyColumn(-1);
     this->proxyToolModel->setSortCaseSensitivity(Qt::CaseInsensitive);
 
+    // Create the search view
     this->searchView = new QTreeView();
     this->searchView->setRootIsDecorated(false);
     this->searchView->setAlternatingRowColors(true);
     this->searchView->setSortingEnabled(true);
-
     this->searchView->setMinimumHeight(300);
     this->searchView->setUniformRowHeights(true);
-//    void QAbstractItemView::selectionChanged(const QItemSelection &selected, const QItemSelection &deselected)
 
+    // Create the tool model
     this->toolModel = new QStandardItemModel(0, 4, this);
-
     this->toolModel->setHeaderData(0, Qt::Horizontal, QObject::tr("Id"));
     this->toolModel->setHeaderData(1, Qt::Horizontal, QObject::tr("Title"));
     this->toolModel->setHeaderData(2, Qt::Horizontal, QObject::tr("Description"));
@@ -85,6 +126,7 @@ void SearchToolsWidget::createSearchView()
     this->proxyToolModel->setSourceModel(this->toolModel);
     this->searchView->setModel(this->proxyToolModel);
 
+    // Create the view headers
     QHeaderView *viewHeader = this->searchView->header();
     viewHeader->setDefaultSectionSize(100);
     viewHeader->setSectionResizeMode(0, QHeaderView::Interactive);
@@ -100,23 +142,11 @@ void SearchToolsWidget::createSearchView()
     this->searchView->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
     connect(this->searchView->selectionModel(), &QItemSelectionModel::currentChanged, this, &SearchToolsWidget::selectionChanged);
-//    this->searchView->hide();
-
-//    this->table = new QTableWidget();
-//    this->table->setMinimumHeight(150);
-//    this->table->setRowCount(0);
-//    this->table->setColumnCount(4);
-//    this->table->move(0, 0);
-//    this->table->setSelectionBehavior(QAbstractItemView::SelectRows);
-//    this->table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-//    this->table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-//    this->table->setHorizontalHeaderLabels({ "ID", "Title", "Description", "Downloads" });
-//    connect(this->table, &QTableWidget::itemSelectionChanged, this, &SearchToolsWidget::selectionChanged);
-//    this->table->hide();
 }
 
 void SearchToolsWidget::createProcesses()
 {
+    // Create the search process, pprint process and toolDatabaseProcess (to search all tools)
     this->searchProcess = new QProcess(this);
     connect(this->searchProcess, &QProcess::started, this, &SearchToolsWidget::searchProcessStarted);
     connect(this->searchProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::searchProcessFinished);
@@ -131,6 +161,7 @@ void SearchToolsWidget::createProcesses()
 
 void SearchToolsWidget::downloadToolDatabase()
 {
+    // Search for the 1000 first boutiques tools in the Zenodo database
     connect(this->toolDatabaseProcess, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this, &SearchToolsWidget::createToolDatabase);
 
     this->toolDatabaseProcess->start(BoutiquesPaths::Python(), {BoutiquesPaths::Bosh(), "search", "-m 1000"});
@@ -138,6 +169,7 @@ void SearchToolsWidget::downloadToolDatabase()
 
 void SearchToolsWidget::searchChanged()
 {
+    // Filter the shown tools when the search field changes
     QRegExp::PatternSyntax syntax = QRegExp::PatternSyntax(QRegExp::RegExp);
     Qt::CaseSensitivity caseSensitivity = Qt::CaseInsensitive;
 
@@ -147,11 +179,13 @@ void SearchToolsWidget::searchChanged()
 
 void SearchToolsWidget::selectionChanged()
 {
+    // PPrint the tool help when a tool is selected
     ToolDescription *tool = this->getSelectedTool();
     if(tool == nullptr) {
         return;
     }
 
+    // If pprint is already runnning: kill it and ignore the next pprint error, then retry selectionChanged()
     if(this->pprintProcess->state() != QProcess::NotRunning)
     {
         this->ignorePPrintError = true;
@@ -160,31 +194,34 @@ void SearchToolsWidget::selectionChanged()
         return;
     }
 
+    // Start "bosh pprint"
     this->ignorePPrintError = false;
-
     this->pprintProcess->start(BoutiquesPaths::Python(), {BoutiquesPaths::Bosh(), "pprint", tool->id});
-
     this->loadingLabel->setText("Getting tool help...");
 }
 
 void SearchToolsWidget::pprintProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
-    Q_UNUSED(exitCode)
     Q_UNUSED(exitStatus)
+
+    // Once pprint process is finished: emit toolSelected() so that other widgets update (invocationGUIWidget creates a GUI accordingly)
 
     if(exitCode == 0)
     {
+        // If pprint terminated successfully: display output
         QByteArray result = this->pprintProcess->readAllStandardOutput();
         this->info->setText(QString::fromUtf8(result));
     }
     else
     {
+        // If pprint encountered an error: display error
         if(!this->ignorePPrintError)
         {
             this->info->setText("Error while reading the tool description.");
         }
     }
 
+    // Show info and emit toolSelected()
     this->infoLabel->show();
     this->info->show();
     emit toolSelected();
@@ -192,6 +229,12 @@ void SearchToolsWidget::pprintProcessFinished(int exitCode, QProcess::ExitStatus
 
 void SearchToolsWidget::searchBoutiquesTools()
 {
+    // When user launch a new search (with enter or the "search" button):
+    //  - update the tool database if necessary (toolDatabaseUpdated)
+    //  - emit toolDeselected() to hide unecessary widgets
+    //  - if this->descriptors is not empty: the tool database was loaded, all tools are added in the model and filtered while typing: do nothing when user hits enter.
+    //  - otherwise: the launch a regular "bosh search" to query boutiques tool in the zenodo database
+
     if(this->toolDatabaseUpdated)
     {
         this->loadToolDatabase();
@@ -206,6 +249,7 @@ void SearchToolsWidget::searchBoutiquesTools()
         return;
     }
 
+    // If the search process is already runnning: kill it and retry searchBoutiquesTools()
     if(this->searchProcess->state() != QProcess::NotRunning)
     {
         this->searchProcess->kill();
@@ -213,12 +257,12 @@ void SearchToolsWidget::searchBoutiquesTools()
         return;
     }
 
+    // Hide unused widgets
     this->loadingLabel->show();
-//    this->table->hide();
-//    this->searchView->hide();
     this->infoLabel->hide();
     this->info->hide();
 
+    // Launch "bosh search" to query the Zenodo database
     QString searchQuery = this->searchLineEdit->text();
 
     this->searchProcess->start(BoutiquesPaths::Python(), {BoutiquesPaths::Bosh(), "search", "-m 50", searchQuery});
@@ -240,8 +284,10 @@ void SearchToolsWidget::searchProcessStarted()
 
 QStringList SearchToolsWidget::readSearchResults(QString &output)
 {
+    // Remove the color characeters from the search results
     QString outputClean = output.replace(QRegExp("\x1b\[[0-9;]*[mGKF]"), "");
 
+    // Extract each line from output
     QTextStream outputSream(&outputClean);
     QStringList lines;
     while (!outputSream.atEnd())
@@ -253,6 +299,7 @@ QStringList SearchToolsWidget::readSearchResults(QString &output)
 
 void SearchToolsWidget::parseSearchResults(const QStringList &lines, vector<ToolDescription> &searchResults)
 {
+    // Extract ID, Title, Description and number of Downloads from search results
     QString line = lines[1];
     int idIndex = line.indexOf("ID");
     int titleIndex = line.indexOf("TITLE");
@@ -273,6 +320,7 @@ void SearchToolsWidget::parseSearchResults(const QStringList &lines, vector<Tool
 
 void SearchToolsWidget::addSearchResult(const ToolDescription &toolDescription, const unsigned int toolDescriptionIndex)
 {
+    // Add search result in the tool model
     this->toolModel->insertRow(0);
     this->toolModel->setData(this->toolModel->index(0, 0), toolDescription.id);
     this->toolModel->setData(this->toolModel->index(0, 1), toolDescription.title);
@@ -284,30 +332,23 @@ void SearchToolsWidget::addSearchResult(const ToolDescription &toolDescription, 
 
 void SearchToolsWidget::displaySearchResults()
 {
+    // Add all search results to the tool model (the proxy model will be filtered according to the search input field)
     this->loadingLabel->hide();
     this->searchView->show();
 
-//    this->toolModel->clear();
     this->toolModel->removeRows(0, this->toolModel->rowCount());
-//    this->table->show();
-//    this->table->setRowCount(static_cast<int>(this->searchResults.size()));
     for(unsigned int i=0 ; i<this->searchResults.size() ; i++){
         const ToolDescription &searchResult = this->searchResults[i];
         this->addSearchResult(searchResult, i);
-//        this->table->setItem(static_cast<int>(i), 0, new QTableWidgetItem(searchResult.id));
-//        this->table->setItem(static_cast<int>(i), 1, new QTableWidgetItem(searchResult.title));
-//        this->table->setItem(static_cast<int>(i), 2, new QTableWidgetItem(searchResult.description));
-//        this->table->setItem(static_cast<int>(i), 3, new QTableWidgetItem(searchResult.nDownloads));
     }
-//    this->searchView->update();
-//    this->searchView->setModel(this->toolModel);
-//    emit this->toolModel->dataChanged(this->toolModel->index(0, 0), this->toolModel->index(this->toolModel->rowCount() - 1, this->toolModel->columnCount() - 1));
 }
 
 void SearchToolsWidget::searchProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     Q_UNUSED(exitCode)
     Q_UNUSED(exitStatus)
+
+    // Extract and display search results, display an error if the search process returns less than two lines
     this->loadingLabel->hide();
 
     QString output = QString::fromUtf8(this->searchProcess->readAll());
@@ -335,6 +376,9 @@ void SearchToolsWidget::createToolDatabase(int exitCode, QProcess::ExitStatus ex
     {
         return;
     }
+
+    // Extract tools from output of the tool database process
+    // Then pull all tools from zenodo database
 
     QString output = QString::fromUtf8(this->toolDatabaseProcess->readAll());
     QStringList lines = this->readSearchResults(output);
@@ -365,9 +409,14 @@ void SearchToolsWidget::pullProcessFinished(int exitCode, QProcess::ExitStatus e
     Q_UNUSED(exitCode)
     Q_UNUSED(exitStatus)
 
+    // Create the database file "~/.cache/boutiques/all-descriptors.json" containing all descriptors
+    // "all-descriptors.json" is just an simple (unordered) list of the descriptors
+
     QDir cacheDirectory(QDir::homePath() + BOUTIQUES_CACHE_PATH);
 
-    QJsonArray descriptors;
+    // Extract all descriptors from all zenodo-TOOL_ID.json files in ~/.cache/boutiques
+
+    QJsonObject descriptors;
     for(const ToolDescription &toolDescription: this->allTools)
     {
         QString id = QString::fromStdString(toolDescription.id.toStdString()); // deep copy the string
@@ -383,8 +432,10 @@ void SearchToolsWidget::pullProcessFinished(int exitCode, QProcess::ExitStatus e
         QJsonObject descriptorObject = descriptorDocument.object();
         descriptorObject["id"] = toolDescription.id;
         descriptorObject["nDownloads"] = toolDescription.nDownloads;
-        descriptors.push_back(descriptorObject);
+        descriptors[toolDescription.id] = descriptorObject;
     }
+
+    // Use those descriptors to write the "all-descriptors.json" file
 
     QFile descriptorsFile(cacheDirectory.absoluteFilePath(DATABASE_NAME));
     if (!descriptorsFile.open(QIODevice::WriteOnly | QIODevice::Text))
@@ -394,32 +445,41 @@ void SearchToolsWidget::pullProcessFinished(int exitCode, QProcess::ExitStatus e
     }
     QJsonDocument descriptorsDocument(descriptors);
     descriptorsFile.write(descriptorsDocument.toJson());
+
+    // Do not loadToolDatabase() right away since it is not safe to modify the model while the user is searching a tool
+    // loadToolDatabase() will be called when the user finishes his search (hit enter or press search), at this point it will be safe to update descriptors and searchResults
     this->toolDatabaseUpdated = true;
 }
 
 void SearchToolsWidget::loadToolDatabase()
 {
+    // Load tool database from the file "~/.cache/boutiques/all-descriptors.json" containing all tool descriptors
+    // "all-descriptors.json" is just an simple (unordered) list of the descriptors
+
     QDir cacheDirectory(QDir::homePath() + BOUTIQUES_CACHE_PATH);
 
     QFile file(cacheDirectory.absoluteFilePath(DATABASE_NAME));
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
+        // Fail silently if database file is not found
         return;
     }
+
+    // Populate searchResults with all tools and display search results
     QJsonDocument descriptorsDocument(QJsonDocument::fromJson(file.readAll()));
-    this->descriptors = descriptorsDocument.array();
+    this->descriptors = descriptorsDocument.object();
 
     searchResults.clear();
-    for(int i=0 ; i<this->descriptors.size() ; i++)
-    {
-        const QJsonObject &descriptor = this->descriptors.at(i).toObject();
+
+    foreach(const QString& id, this->descriptors.keys()) {
+        const QJsonObject &descriptor = this->descriptors.value(id).toObject();
         this->searchResults.emplace_back();
         ToolDescription& searchResult = this->searchResults.back();
         searchResult.title = descriptor["name"].toString();
         searchResult.description = descriptor["description"].toString();
         searchResult.id = descriptor["id"].toString();
         searchResult.nDownloads = descriptor["nDownloads"].toInt();
-
     }
+
     this->displaySearchResults();
 }

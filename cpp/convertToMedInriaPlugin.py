@@ -21,7 +21,8 @@ nameMap = {
 	"dropwidget": "DropWidget",
 	"abstractfilehandler": "AbstractFileHandler",
 	"filehandler": "FileHandler",
-	"configuration": "Configuration"
+	"configuration": "Configuration",
+	"installer": "Installer"
 }
 
 # List the src/ directory and duplicates each file in nameMap, rename it and output it to medInriaPlugin/

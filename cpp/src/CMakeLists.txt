@@ -22,6 +22,7 @@ add_executable(${PROJECT_NAME}
     dropwidget.cpp
     abstractfilehandler.cpp
     filehandler.cpp
+    installer.cpp
     main.cpp
 )
 

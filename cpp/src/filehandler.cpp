@@ -15,6 +15,8 @@
 
 FileHandler::FileHandler(medBoutiquesToolBox *toolbox): toolbox(toolbox)
 {
+    // Read dataTypeToFormatAndExtension, preferredFormatsAndExtensions and outputExtensions from the settings
+
     QFile file(BoutiquesPaths::Settings());
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
@@ -36,6 +38,7 @@ FileHandler::FileHandler(medBoutiquesToolBox *toolbox): toolbox(toolbox)
 
 void FileHandler::checkAcceptDragEvent(QDragEnterEvent *event)
 {
+    // See description in filehandler.h
 #ifdef BOUTIQUE_GUI_STANDALONE
     event->acceptProposedAction();
 #else
@@ -61,6 +64,7 @@ QList<FormatObject> FileHandler::getFileFormatsForData(medAbstractData *data)
     fileFormats.push_back(FormatObject("Type 2", "Description 2", {".ext3", ".ext4"}));
     return fileFormats;
 #else
+    // Get all compatible writers
     QList<FormatObject> fileFormats;
     QList<QString> allWriters = medAbstractDataFactory::instance()->writers();
     QHash<QString, dtkAbstractDataWriter*> possibleWriters;
@@ -73,12 +77,13 @@ QList<FormatObject> FileHandler::getFileFormatsForData(medAbstractData *data)
             delete writer;
     }
 
+    // Warn user if no compatible writer, and return an empty list
     if (possibleWriters.isEmpty()) {
         medMessageController::instance()->showError("Sorry, we have no exporter for this format.");
         return fileFormats;
     }
 
-    // we use allWriters as the list of keys to make sure we traverse possibleWriters
+    // We use allWriters as the list of keys to make sure we traverse possibleWriters
     // in the order specified by the writers priorities.
     foreach(QString type, allWriters) {
         if (!possibleWriters.contains(type))
@@ -87,6 +92,7 @@ QList<FormatObject> FileHandler::getFileFormatsForData(medAbstractData *data)
         QStringList extensions = possibleWriters[type]->supportedFileExtensions();
         fileFormats.append(FormatObject(type, possibleWriters[type]->description(), extensions));
     }
+
     return fileFormats;
 #endif
 }
@@ -98,14 +104,17 @@ FormatAndExtension FileHandler::getFormatAndExtensionForData(medAbstractData *da
     FormatAndExtension formatAndExtension("Type 1", ".ext1");
     return formatAndExtension;
 #else
+
     FormatAndExtension formatAndExtension;
     const QString &dataType = data->identifier();
     if(this->dataTypeToFormatAndExtension.contains(dataType))
     {
+        // If the data type is in dataTypeToFormatAndExtension: return the associated format and extension
         formatAndExtension = FormatAndExtension(this->dataTypeToFormatAndExtension[dataType].toArray());
     }
     else
     {
+        // Otherwise: for all formats compatible with the data type: return the first one in preferredFormatsAndExtensions if any
         const QList<FormatObject> &fileFormats = this->getFileFormatsForData(data);
         bool foundPreferredFormat = false;
         for(const auto &formatObject : fileFormats)
@@ -127,7 +136,8 @@ FormatAndExtension FileHandler::getFormatAndExtensionForData(medAbstractData *da
         }
         if(!foundPreferredFormat)
         {
-            formatAndExtension = this->getFormatForInputFile(dataType, fileFormats);
+            // If no format was found: ask the user to select one
+            formatAndExtension = this->askFormatAndExtensionForData(dataType, fileFormats);
         }
     }
     return formatAndExtension;
@@ -175,8 +185,9 @@ bool FileHandler::hasKnownExtension(const QString &fileName)
     return false;
 }
 
-FormatAndExtension FileHandler::getFormatForInputFile(const QString &dataType, const QList<FormatObject> &fileFormats)
+FormatAndExtension FileHandler::askFormatAndExtensionForData(const QString &dataType, const QList<FormatObject> &fileFormats)
 {
+    // Create a dialog with a combo box to select the format and extension for the given format
     QDialog messageBox;
 
     QVBoxLayout *messageBoxLayout = new QVBoxLayout();
@@ -194,6 +205,7 @@ FormatAndExtension FileHandler::getFormatForInputFile(const QString &dataType, c
     messageBoxLayout->addWidget(title);
     messageBoxLayout->addWidget(message);
 
+    // Create the combo box and populate it with the compatible formats
     QComboBox* typeComboBox = new QComboBox();
 
     QStandardItemModel * model = new QStandardItemModel();
@@ -222,16 +234,17 @@ FormatAndExtension FileHandler::getFormatForInputFile(const QString &dataType, c
     hLayout->addWidget(typeComboBox);
     hGroup->setLayout(hLayout);
 
-    //    QCheckBox *checkBox = new QCheckBox("Always use this file format when possible");
-    //    checkBox->setCheckState(Qt::Checked);
-    QRadioButton *alwaysWhenPossibleButton = new QRadioButton("Always use this file format when possible");
-    QRadioButton *alwaysWidthThisTypeButton = new QRadioButton("Always use this file format for this type of data");
+    // The user has three choices:
+    //  - Always use this file format when possible: add the chosen value to preferredFormatsAndExtensions
+    //  - Always use this file format for this type of data: add the chosen value to dataTypeToFormatAndExtension
+    //  - Ask again next time: pretty explicit
+    QRadioButton *alwaysWithThisTypeButton = new QRadioButton("Always use this file format for this type of data");
+    QRadioButton *alwaysWhenPossibleButton = new QRadioButton("Always use this file format when possible (and no format is associated with this type of data)");
     QRadioButton *askNextTimeButton = new QRadioButton("Ask again next time");
 
     messageBoxLayout->addWidget(hGroup);
-//    messageBoxLayout->addWidget(checkBox);
+    messageBoxLayout->addWidget(alwaysWithThisTypeButton);
     messageBoxLayout->addWidget(alwaysWhenPossibleButton);
-    messageBoxLayout->addWidget(alwaysWidthThisTypeButton);
     messageBoxLayout->addWidget(askNextTimeButton);
     messageBoxLayout->addWidget(okButton);
 
@@ -239,11 +252,14 @@ FormatAndExtension FileHandler::getFormatForInputFile(const QString &dataType, c
 
     messageBox.exec();
 
+    // Get chosen type and extension
     QString chosenExtension = typeComboBox->itemData(typeComboBox->currentIndex(), Qt::UserRole + 1).toString();
     QString chosenType = typeComboBox->itemData(typeComboBox->currentIndex(), Qt::UserRole + 2).toString();
 
+    // Update preferredFormatsAndExtensions if alwaysWhenPossible
     if(alwaysWhenPossibleButton->isChecked())
     {
+        // Check that type and extension is not already in preferredFormatsAndExtensions before adding it
         bool containsChoice = false;
         for(int i = 0 ; i<this->preferredFormatsAndExtensions.size() ; ++i)
         {
@@ -261,7 +277,8 @@ FormatAndExtension FileHandler::getFormatForInputFile(const QString &dataType, c
         }
     }
 
-    if(alwaysWidthThisTypeButton->isChecked())
+    // Update dataTypeToFormatAndExtension if alwaysWithThisType
+    if(alwaysWithThisTypeButton->isChecked())
     {
         this->dataTypeToFormatAndExtension[dataType] = QJsonArray::fromStringList({chosenType, chosenExtension});
         this->savePreferredFormatSettings();
@@ -274,7 +291,7 @@ QString FileHandler::createTemporaryInputFile(medAbstractData *data, const QStri
 {
     Q_UNUSED(data)
     QTemporaryFile file("XXXXXX_" + chosenType + chosenExtension);
-    if (file.open()) {
+    if (!chosenType.isEmpty() && file.open()) {
         QString absoluteFilePath = QFileInfo(file).absoluteFilePath();
 #ifndef BOUTIQUE_GUI_STANDALONE
         medDataManager::instance()->exportDataToPath(data, absoluteFilePath, chosenType);
@@ -287,15 +304,25 @@ QString FileHandler::createTemporaryInputFile(medAbstractData *data, const QStri
 
 void FileHandler::savePreferredFormatSettings()
 {
-    QFile file(BoutiquesPaths::Settings());
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    // Read settings from "boutiques-gui-settings.json"
+    QFile readFile(BoutiquesPaths::Settings());
+    QJsonObject settings;
+    if (readFile.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        QJsonDocument jsonDocument(QJsonDocument::fromJson(readFile.readAll()));
+        settings = jsonDocument.object();
+        readFile.close();
+    }
+
+    // Overwrite dataTypeToFormatAndExtension, preferredFormatsAndExtensions and outputExtensions and save settings file
+    QFile writeFile(BoutiquesPaths::Settings());
+    if (!writeFile.open(QIODevice::WriteOnly | QIODevice::Text))
     {
         return;
     }
-    QJsonObject preferredFormats;
-    preferredFormats["dataTypeToFormatAndExtension"] = this->dataTypeToFormatAndExtension;
-    preferredFormats["preferredFormatsAndExtensions"] = this->preferredFormatsAndExtensions;
-    preferredFormats["outputExtensions"] = this->outputExtensions;
-    QJsonDocument document(preferredFormats);
-    file.write(document.toJson());
+    settings["dataTypeToFormatAndExtension"] = this->dataTypeToFormatAndExtension;
+    settings["preferredFormatsAndExtensions"] = this->preferredFormatsAndExtensions;
+    settings["outputExtensions"] = this->outputExtensions;
+    QJsonDocument document(settings);
+    writeFile.write(document.toJson());
 }

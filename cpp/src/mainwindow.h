@@ -7,6 +7,7 @@
 #include "invocationwidget.h"
 #include "executionwidget.h"
 #include "toolboxwidget.h"
+#include "installer.h"
 
 class MainWindow : public QMainWindow
 {
@@ -15,19 +16,13 @@ public:
     SearchToolsWidget *searchToolsWidget;
     InvocationWidget *invocationWidget;
     ExecutionWidget *executionWidget;
-    ToolBoxWidget *toolBoxWidget;
+    ToolBoxWidget *toolBoxWidget;           // Simulates the medBoutiquesToolBox widget in medInria medBoutiques plugin
+                                            // It is only used for compatibility with medInria
+                                            // and to simulates the draggable inputs (drag-and-drop on input parameters)
     QWidget *centralWidget;
-//    QLayout *layout;
-
-private:
-    void checkBoutiquesInstallation();
-    void installBoutiques(QJsonObject *settings = nullptr);
-    void setBoutiquesInstalled(QJsonObject *settings);
-    bool isPythonWorking(const QString &version = "");
-    bool isDockerWorking();
 
 public:
-    MainWindow(QWidget *parent = 0);
+    MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 };
 

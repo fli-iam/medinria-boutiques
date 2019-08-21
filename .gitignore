@@ -4,6 +4,7 @@ cpp/src/*.autosave
 cpp/build*
 cpp/medInriaPlugin
 cpp/BoutiquesGUI-Data
+cpp/v1.0-linux-x86_64.zip
 python/bin/
 python/include/
 python/lib/
