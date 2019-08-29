@@ -19,6 +19,7 @@ class ToolBoxWidget : public QWidget
     Q_OBJECT
 public:
     explicit ToolBoxWidget(QWidget *parent = nullptr);
+    virtual ~ToolBoxWidget();
 
     AbstractFileHandler *fileHandler;
 signals:

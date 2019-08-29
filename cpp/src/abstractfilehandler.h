@@ -40,7 +40,9 @@ public:
     virtual void checkAcceptDragEvent(QDragEnterEvent *event) = 0;
     virtual QString createTemporaryInputFileForMimeData(const QMimeData *mimeData) = 0;
     virtual QString createTemporaryInputFileForCurrentInput() = 0;
+    virtual void deleteTemporaryFiles() = 0;
     virtual bool hasKnownExtension(const QString &fileName) = 0;
+    virtual QString normalizePath(const QString &path) = 0;
 };
 
 #endif // ABSTRACTFILEHANDLER_H

@@ -46,6 +46,8 @@ private:
                                                 // (automatically filters the items show in the search view)
     QTreeView *searchView;
     QLabel* infoLabel;
+    QLabel* infoShortDescription;
+    QPushButton* moreInfoButton;
     QTextEdit* info;
     QProcess* searchProcess;
     QProcess* pprintProcess;
@@ -76,6 +78,9 @@ private:
     void parseSearchResults(const QStringList &lines, vector<ToolDescription> &searchResults);
     void addSearchResult(const ToolDescription &toolDescription, const unsigned int toolDescriptionIndex);
     void displaySearchResults();
+    void prettyPrint();
+    // Get selected tool descriptor from tool id
+    const QJsonObject getToolDescriptor(const QString &toolId);
 
 signals:
     void toolSelected();
@@ -92,6 +97,7 @@ public slots:
     void pullProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
 protected slots:
     void searchChanged();
+    void toggleMoreInfo();
 };
 
 #endif // SEARCHTOOLSWIDGET_H

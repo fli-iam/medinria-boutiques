@@ -34,9 +34,12 @@ private:
     QJsonArray outputExtensions;                        // Define the extensions of the boutiques tools outputs which can then be opened in medInria.
                                                         // If an output parameter has an extension listed in `outputExtensions`,
                                                         // a button will enable to set the output as *current output* ; it will automatically be opened in medInria once the process is finished.
+    QList<QString> temporaryFiles;                        // Keep track of created temporary files to delete them once the process is finished
 
 public:
     FileHandler(medBoutiquesToolBox *toolbox = nullptr);
+    virtual ~FileHandler();
+
     // Drag event are accepted (object is droppable) if the dragged object is a file or if the medDataIndex is valid for series
     void checkAcceptDragEvent(QDragEnterEvent *event) override;
 
@@ -45,9 +48,15 @@ public:
     QString createTemporaryInputFileForMimeData(const QMimeData *mimeData) override;
     QString createTemporaryInputFileForCurrentInput() override;
 
+    // Delete temporary files once the boutiques tool process is finished
+    void deleteTemporaryFiles() override;
+
     // Check if the file name has a known extension that can be opened in medInria
     // Used to filter which parameter can be set as output (to open them automatically once the process is finished)
     bool hasKnownExtension(const QString &fileName) override;
+
+    // Normalize path so that Windows path follow this format: /c/a/windows/path (do nothing on linux, only affect path starting with a capital letter and a colon, as in C:/Users/)
+    QString normalizePath(const QString &path) override;
 
 private:
     // Returns all file formats compatible with the data

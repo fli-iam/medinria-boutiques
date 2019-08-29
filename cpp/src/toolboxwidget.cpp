@@ -16,3 +16,8 @@ ToolBoxWidget::ToolBoxWidget(QWidget *parent) : QWidget(parent), fileHandler(new
     this->setLayout(layout);
 #endif
 }
+
+ToolBoxWidget::~ToolBoxWidget()
+{
+    delete fileHandler;
+}

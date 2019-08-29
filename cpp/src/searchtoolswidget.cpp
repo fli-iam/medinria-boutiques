@@ -31,10 +31,15 @@ SearchToolsWidget::SearchToolsWidget(QWidget *parent) : QWidget(parent), toolDat
     // Create the info text area for the tool description
     this->infoLabel = new QLabel("Tool info");
     this->infoLabel->hide();
+    this->infoShortDescription = new QLabel("");
+    this->infoShortDescription->hide();
+    this->infoShortDescription->setWordWrap(true);
     this->info = new QTextEdit();
     this->info->setMinimumHeight(300);
     this->info->setReadOnly(true);
     this->info->hide();
+    this->moreInfoButton = new QPushButton("More info");
+    this->moreInfoButton->hide();
 
     // Create the layout
     QVBoxLayout *layout = new QVBoxLayout(this);
@@ -42,13 +47,16 @@ SearchToolsWidget::SearchToolsWidget(QWidget *parent) : QWidget(parent), toolDat
     layout->addWidget(this->loadingLabel);
     layout->addWidget(this->searchView);
     layout->addWidget(this->infoLabel);
+    layout->addWidget(this->infoShortDescription);
     layout->addWidget(this->info);
+    layout->addWidget(this->moreInfoButton);
     this->setLayout(layout);
 
     // Connect signals
     connect(this->button, &QPushButton::clicked, this, &SearchToolsWidget::searchBoutiquesTools);
     connect(this->searchLineEdit, &QLineEdit::textChanged, this, &SearchToolsWidget::searchChanged);
     connect(this->searchLineEdit, &QLineEdit::returnPressed, this, &SearchToolsWidget::searchBoutiquesTools);
+    connect(this->moreInfoButton, &QPushButton::clicked, this, &SearchToolsWidget::toggleMoreInfo);
 
     // Create search, pprint and loadToolDatabase processes
     this->createProcesses();
@@ -84,7 +92,12 @@ const QJsonObject SearchToolsWidget::getSelectedToolDescriptor()
     }
 
     // Otherwise: return the "~/.cache/boutiques/zenodo-TOOL_ID.json" file (if openable, otherwise return an empty QJsonObject)
-    QString id = QString::fromStdString(searchResult->id.toStdString()); // deep copy the string to modify it
+    return this->getToolDescriptor(searchResult->id);
+}
+
+const QJsonObject SearchToolsWidget::getToolDescriptor(const QString &toolId)
+{
+    QString id = QString::fromStdString(toolId.toStdString()); // deep copy the string to modify it
 
     QString descriptorFileName = id.replace(QChar('.'), QChar('-')) + ".json";
     QDir cacheDirectory(QDir::homePath() + "/.cache/boutiques");
@@ -92,7 +105,7 @@ const QJsonObject SearchToolsWidget::getSelectedToolDescriptor()
     QFile file(cacheDirectory.absoluteFilePath(descriptorFileName));
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
-        QMessageBox::critical(this, "Could not open descriptor file", "Error while opening descriptor file (" + descriptorFileName + ") from ~/.cache/boutiques ");
+        QMessageBox::critical(this, "Could not open descriptor file", "Error while opening descriptor file (" + descriptorFileName + ") from ~" + BOUTIQUES_CACHE_PATH);
         return QJsonObject();
     }
 
@@ -179,18 +192,104 @@ void SearchToolsWidget::searchChanged()
 
 void SearchToolsWidget::selectionChanged()
 {
-    // PPrint the tool help when a tool is selected
+    // Display a short description when a tool is selected
+    ToolDescription *tool = this->getSelectedTool();
+    if(tool == nullptr) {
+        return;
+    }
+    const QJsonObject &jsonObject = this->getToolDescriptor(tool->id);
+    const QString &description = jsonObject["description"].toString();
+    const QString &name = jsonObject["name"].toString();
+    const QJsonObject &tags = jsonObject["tags"].toObject();
+    QString tagsString;
+
+    // Parse tags
+    const QStringList &tagNames = tags.keys();
+    for(int i=0 ; i<tagNames.size() ; i++)
+    {
+        const QJsonValue &tag = tags.value(tagNames[i]);
+        tagsString += tagNames[i] + ": ";
+        if(tag.isString())
+        {
+            tagsString += tag.toString();
+        }
+        else if(tag.isArray())
+        {
+            const QJsonArray &tagArray = tag.toArray();
+            for(int i=0 ; i<tagArray.size() ; i++)
+            {
+                tagsString += tagArray[i].toString() + ( i < tagArray.size() - 1 ? ", " : "");
+            }
+        }
+        else if(tag.isObject())
+        {
+            QJsonDocument tagDocument;
+            tagDocument.setObject(tag.toObject());
+            tagsString += tagDocument.toJson();
+        }
+        else
+        {
+            tagsString += tag.toString();
+        }
+        if(i < tags.size() - 1)
+        {
+            tagsString += "\n\t\t";
+        }
+    }
+
+    QString shortDescription = "Name: \t\t" + name + "\n";
+    shortDescription += "Description: \t" + description + "\n";
+    shortDescription += "Tags: \t\t" + tagsString + "\n";
+    this->infoShortDescription->setText(shortDescription);
+    this->moreInfoButton->setText("More info");
+    this->info->clear();
+    this->info->hide();
+    this->infoLabel->show();
+    this->infoShortDescription->show();
+    this->moreInfoButton->show();
+
+    emit toolSelected();
+}
+
+void SearchToolsWidget::toggleMoreInfo()
+{
+    if(this->moreInfoButton->text() == "More info")
+    {
+        if(this->info->toPlainText().isEmpty())
+        {
+            this->prettyPrint();
+        }
+        else
+        {
+            this->moreInfoButton->setText("Less info");
+            this->moreInfoButton->show();
+            this->infoShortDescription->hide();
+            this->info->show();
+        }
+    }
+    else
+    {
+        this->moreInfoButton->setText("More info");
+        this->info->hide();
+        this->infoShortDescription->show();
+        this->moreInfoButton->show();
+    }
+}
+
+void SearchToolsWidget::prettyPrint()
+{
+    // Pretty print the tool help when a tool is selected
     ToolDescription *tool = this->getSelectedTool();
     if(tool == nullptr) {
         return;
     }
 
-    // If pprint is already runnning: kill it and ignore the next pprint error, then retry selectionChanged()
+    // If pprint is already runnning: kill it and ignore the next pprint error, then retry prettyPrint()
     if(this->pprintProcess->state() != QProcess::NotRunning)
     {
         this->ignorePPrintError = true;
         this->pprintProcess->kill();
-        QTimer::singleShot(100, this, &SearchToolsWidget::selectionChanged);
+        QTimer::singleShot(100, this, &SearchToolsWidget::prettyPrint);
         return;
     }
 
@@ -222,9 +321,9 @@ void SearchToolsWidget::pprintProcessFinished(int exitCode, QProcess::ExitStatus
     }
 
     // Show info and emit toolSelected()
-    this->infoLabel->show();
+    this->infoShortDescription->hide();
+    this->moreInfoButton->setText("Less info");
     this->info->show();
-    emit toolSelected();
 }
 
 void SearchToolsWidget::searchBoutiquesTools()
@@ -419,17 +518,7 @@ void SearchToolsWidget::pullProcessFinished(int exitCode, QProcess::ExitStatus e
     QJsonObject descriptors;
     for(const ToolDescription &toolDescription: this->allTools)
     {
-        QString id = QString::fromStdString(toolDescription.id.toStdString()); // deep copy the string
-        QString descriptorFileName = id.replace(QChar('.'), QChar('-')) + ".json";
-        QFile file(cacheDirectory.absoluteFilePath(descriptorFileName));
-        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        {
-            QMessageBox::critical(this, "Could not open descriptor file", "Error while opening descriptor file (" + descriptorFileName + ") from ~" + BOUTIQUES_CACHE_PATH);
-            return;
-        }
-
-        QJsonDocument descriptorDocument(QJsonDocument::fromJson(file.readAll()));
-        QJsonObject descriptorObject = descriptorDocument.object();
+        QJsonObject descriptorObject = this->getToolDescriptor(toolDescription.id);
         descriptorObject["id"] = toolDescription.id;
         descriptorObject["nDownloads"] = toolDescription.nDownloads;
         descriptors[toolDescription.id] = descriptorObject;
@@ -471,7 +560,9 @@ void SearchToolsWidget::loadToolDatabase()
 
     searchResults.clear();
 
-    foreach(const QString& id, this->descriptors.keys()) {
+    const QStringList &descriptorIds = this->descriptors.keys();
+    for(const QString& id:descriptorIds)
+    {
         const QJsonObject &descriptor = this->descriptors.value(id).toObject();
         this->searchResults.emplace_back();
         ToolDescription& searchResult = this->searchResults.back();

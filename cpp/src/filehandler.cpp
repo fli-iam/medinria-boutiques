@@ -13,7 +13,7 @@
 
 #endif
 
-FileHandler::FileHandler(medBoutiquesToolBox *toolbox): toolbox(toolbox)
+FileHandler::FileHandler(medBoutiquesToolBox *toolbox):AbstractFileHandler(), toolbox(toolbox)
 {
     // Read dataTypeToFormatAndExtension, preferredFormatsAndExtensions and outputExtensions from the settings
 
@@ -34,6 +34,11 @@ FileHandler::FileHandler(medBoutiquesToolBox *toolbox): toolbox(toolbox)
     this->preferredFormatsAndExtensions = json["preferredFormatsAndExtensions"].toArray();
 
     this->outputExtensions = json["outputExtensions"].toArray();
+}
+
+FileHandler::~FileHandler()
+{
+    this->deleteTemporaryFiles();
 }
 
 void FileHandler::checkAcceptDragEvent(QDragEnterEvent *event)
@@ -69,7 +74,8 @@ QList<FormatObject> FileHandler::getFileFormatsForData(medAbstractData *data)
     QList<QString> allWriters = medAbstractDataFactory::instance()->writers();
     QHash<QString, dtkAbstractDataWriter*> possibleWriters;
 
-    foreach(QString writerType, allWriters) {
+    foreach(QString writerType, allWriters)
+    {
         dtkAbstractDataWriter * writer = medAbstractDataFactory::instance()->writer(writerType);
         if (writer->handled().contains(data->identifier()))
             possibleWriters[writerType] = writer;
@@ -85,7 +91,8 @@ QList<FormatObject> FileHandler::getFileFormatsForData(medAbstractData *data)
 
     // We use allWriters as the list of keys to make sure we traverse possibleWriters
     // in the order specified by the writers priorities.
-    foreach(QString type, allWriters) {
+    foreach(QString type, allWriters)
+    {
         if (!possibleWriters.contains(type))
             continue;
 
@@ -172,6 +179,16 @@ QString FileHandler::createTemporaryInputFileForCurrentInput()
 #endif
 }
 
+void FileHandler::deleteTemporaryFiles()
+{
+    for(QString &fileName : this->temporaryFiles)
+    {
+        QFile file(fileName);
+        file.remove();
+    }
+    this->temporaryFiles.clear();
+}
+
 bool FileHandler::hasKnownExtension(const QString &fileName)
 {
     for (int i = 0 ; i<this->outputExtensions.size() ; ++i)
@@ -183,6 +200,17 @@ bool FileHandler::hasKnownExtension(const QString &fileName)
         }
     }
     return false;
+}
+
+QString FileHandler::normalizePath(const QString &path)
+{
+    QRegularExpression regExp("^[A-Z]:");
+    if(regExp.match(path).hasMatch())
+    {
+        QString newPath = QString(path).replace("\\", "/");
+        return "/" + QString(newPath[0].toLower()) + newPath.mid(2);
+    }
+    return path;
 }
 
 FormatAndExtension FileHandler::askFormatAndExtensionForData(const QString &dataType, const QList<FormatObject> &fileFormats)
@@ -290,8 +318,9 @@ FormatAndExtension FileHandler::askFormatAndExtensionForData(const QString &data
 QString FileHandler::createTemporaryInputFile(medAbstractData *data, const QString &chosenType, const QString &chosenExtension)
 {
     Q_UNUSED(data)
-    QTemporaryFile file("XXXXXX_" + chosenType + chosenExtension);
+    QTemporaryFile file(BoutiquesPaths::BoutiquesTemp().absoluteFilePath("XXXXXX_" + chosenType + chosenExtension));
     if (!chosenType.isEmpty() && file.open()) {
+        temporaryFiles.push_back(QDir::temp().absoluteFilePath(file.fileName()));
         QString absoluteFilePath = QFileInfo(file).absoluteFilePath();
 #ifndef BOUTIQUE_GUI_STANDALONE
         medDataManager::instance()->exportDataToPath(data, absoluteFilePath, chosenType);

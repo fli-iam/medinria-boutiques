@@ -272,7 +272,6 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 
     // Create a new group widget, child of the scroll area, which will contain the entire invocation GUI
     this->group = new QWidget(this->scrollArea);
-    this->scrollArea->setWidget(this->group);
 
     QVBoxLayout *groupLayout = new QVBoxLayout(this->group);
     this->group->setLayout(groupLayout);
@@ -616,6 +615,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                 {
                     // If parameter is File: create a line edit (for the file path), a "Select file" button, and a "Set input" button
                     QLineEdit *lineEdit = new QLineEdit();
+                    lineEdit->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
                     lineEdit->setPlaceholderText(inputDescription);
                     lineEdit->setText(inputValue.toString());
 
@@ -743,6 +743,8 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         optionalInputGroup->hide();
     }
 
+    this->scrollArea->setWidget(this->group);
+
     // emit invocation changed with a delay
     this->emitInvocationChanged();
 }
@@ -814,7 +816,7 @@ void InvocationGUIWidget::populateAbsolutePath(const QJsonValue &fileNameValue, 
         return;
     }
     // Add the resulting absolute path to the current directories (to mount them later)
-    const QString &path = fileInfo.absolutePath();
+    const QString &path = this->fileHandler->normalizePath(fileInfo.absolutePath());
     if(!directories.contains(path))
     {
         directories.append(path);
@@ -906,7 +908,7 @@ void InvocationGUIWidget::populateOutputDirectoriesAndSetOutputFileName(const QJ
                     }
 
                     // Add the absolute path to the list of directories to mount
-                    const QString &absolutePath = fileInfo.absolutePath();
+                    const QString &absolutePath = this->fileHandler->normalizePath(fileInfo.absolutePath());
                     if(!directories.contains(absolutePath))
                     {
                         directories.append(absolutePath);
