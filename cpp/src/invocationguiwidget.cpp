@@ -476,6 +476,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                 {
                     // If input is a list of files: a "Select files" push button opens a dialog to select multiple files
                     QPushButton *pushButton = new QPushButton("Select files");
+                    pushButton->setMaximumWidth(100);
 
                     connect(pushButton, &QPushButton::clicked, [this, inputName, lineEdit]()
                     {
@@ -619,7 +620,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                 {
                     // If parameter is File: create a line edit (for the file path), a "Select file" button, and a "Set input" button
                     QLineEdit *lineEdit = new QLineEdit();
-                    lineEdit->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+                    lineEdit->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
                     lineEdit->setPlaceholderText(inputDescription);
                     lineEdit->setText(inputValue.toString());
 
@@ -628,6 +629,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                     layout->addWidget(lineEdit);
 
                     QPushButton *selectFilePushButton = new QPushButton("Select file");
+                    selectFilePushButton->setMaximumWidth(100);
                     connect(selectFilePushButton, &QPushButton::clicked, [this, inputName, lineEdit]()
                     {
                         lineEdit->setText(this->fileHandler->normalizePath(QFileDialog::getOpenFileName(this, "Select " + inputName)));
@@ -635,6 +637,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                     layout->addWidget(selectFilePushButton);
 
                     QPushButton *setInputPushButton = new QPushButton("Set input");
+                    setInputPushButton->setMaximumWidth(100);
                     connect(setInputPushButton, &QPushButton::clicked, [this, lineEdit]() { lineEdit->setText(this->fileHandler->createTemporaryInputFileForCurrentInput()); } );
                     layout->addWidget(setInputPushButton);
 
@@ -664,7 +667,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                     });
                 }
 
-                if(inputType == "String")
+                if(inputType == "String" || inputType == "File")
                 {
                     // If input is a string: check if there is a corresponding output file,
                     // if there is one: create a "Set output" button to automatically open the output file in medInria when the process ends
@@ -691,6 +694,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                    {
                         // Create the "Set output" button
                         QPushButton *toggleOutputPushButton = new QPushButton("Set output");
+                        toggleOutputPushButton->setMaximumWidth(100);
                         connect(toggleOutputPushButton, &QPushButton::clicked, [this, toggleOutputPushButton, inputId]() { this->toggleOutputFile(toggleOutputPushButton, inputId); } );
                         layout->addWidget(toggleOutputPushButton);
                     }
