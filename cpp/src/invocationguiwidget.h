@@ -105,6 +105,31 @@ private:
     // If the parameter can be associated with multiple output files, the user is asked to selected the output he wants to consider
     void toggleOutputFile(QPushButton *toggleOutputPushButton, const QString &inputId);
 
+    // Create input GUI
+    // Create input groups
+    // For each group:
+    // - create the GroupObject (containing the widget, layout and if it is optional)
+    // - create a QGroupBox and its layout
+    // - check if group is optional (group is optional if one of its member is optional)
+    // - add the group widget to the layout accordingly (main inputs or optional inputs)
+    void createInputGroups(const QJsonObject &descriptor, vector<pair<QGroupBox *, QVBoxLayout *> > &destinationLayouts, QVBoxLayout *mainLayout, QVBoxLayout *optionalLayout);
+    // If input is a list of files: a "Select files" push button opens a dialog to select multiple files
+    void createInputFiles(QWidget *widget, QLayout *layout, QLineEdit *lineEdit, const QString &inputName);
+    // Populate idToInputObject from the descriptor inputs
+    void populateIdToInputObject(const QJsonObject &descriptor);
+    // Mutually exclusive groups are controlled with a comboBox (drop down menu) containing the group parameters (the user must choose one parameter among the group members)
+    void createMutuallyExclusiveGroup(GroupObject *groupObject, QLayout *parentLayout, const QString &inputName, const QString &inputId, const QJsonValue &inputValue);
+    // Create an input field (QLineEdit) to define a list of values (files, strings or numbers)
+    void createInputList(InputObject &inputObject, QWidget *widget, QLayout *layout, const QString &inputId, const QString &inputName, const QString &inputType, const QJsonValue &inputValue);
+    // If the parameter has "value-choices": create a combo box to be able to select one of those choices
+    void createInputChoices(InputObject &inputObject, QLayout *layout, const QString &inputId, const QString &inputType);
+    // If type is String: just create a line edit
+    void createStringInput(InputObject &inputObject, QLayout *layout, const QString &inputId, const QJsonValue &inputValue, const QString &inputDescription);
+    // If type is Number: create a spin box and set min, max and exclusive min and max
+    void createNumberInput(InputObject &inputObject, QLayout *layout, const QString &inputId, const QJsonValue &inputValue);
+    // If parameter is File: create a line edit (for the file path), a "Select file" button, and a "Set input" button
+    void createFileInput(InputObject &inputObject, QWidget *widget, QLayout *layout, const QString &inputId, const QString &inputName, const QJsonValue &inputValue, const QString &inputDescription);
+
 signals:
     void invocationChanged();
 

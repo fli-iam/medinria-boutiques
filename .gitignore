@@ -1,5 +1,6 @@
 data/
-cpp/src/CMakeLists.txt.user
+cpp/src/CMakeCache.txt
+cpp/src/CMakeLists.txt.user*
 cpp/src/*.autosave
 cpp/build*
 cpp/medInriaPlugin

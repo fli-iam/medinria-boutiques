@@ -167,11 +167,11 @@ void ExecutionWidget::executionProcessFinished()
 
 void ExecutionWidget::dataReady()
 {
-    QString output = QString::fromUtf8(this->executionProcess->readAll());
+    string output = this->executionProcess->readAll().toStdString();
 
     regex e("\x1b\[[0-9;]*[mGKF]");
 
-    string outputClean = regex_replace(output.toStdString(), e, "");
+    string outputClean = regex_replace(output, e, "");
     this->print(QString::fromStdString(outputClean));
 }
 

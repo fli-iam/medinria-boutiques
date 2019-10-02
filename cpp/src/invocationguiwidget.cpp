@@ -228,6 +228,327 @@ QWidget *InvocationGUIWidget::createUnsetGroup(const QString &inputId, QWidget *
     return hGroup;
 }
 
+void InvocationGUIWidget::populateIdToInputObject(const QJsonObject &descriptor)
+{
+    // Populate idToInputObject from the descriptor inputs
+    QJsonArray inputArray = descriptor["inputs"].toArray();
+    for (int i = 0 ; i<inputArray.size() ; ++i)
+    {
+        const QJsonObject &description = inputArray[i].toObject();
+        const auto &result = this->idToInputObject.emplace(pair<QString, InputObject>(description["id"].toString(), InputObject(description)));
+        // result.first is an iterator: first: id, second: inputObject
+        // result.second tells if emplace was successfull
+        if(!result.second)
+        {
+            // If emplace() replaced the value at the key "description["id"]": warn the user of the error in the descriptor
+            QMessageBox::warning(this, "Error in descriptor file", "Input " + result.first->first + "appears twice in descriptor, only the first one will be considered...");
+        }
+        else
+        {
+            result.first->second.description = description;
+        }
+    }
+}
+
+void InvocationGUIWidget::createInputGroups(const QJsonObject &descriptor, vector<pair<QGroupBox*, QVBoxLayout*>> &destinationLayouts, QVBoxLayout *mainLayout, QVBoxLayout *optionalLayout)
+{
+    // Create input groups
+    // For each group:
+    // - create the GroupObject (containing the widget, layout and if it is optional)
+    // - create a QGroupBox and its layout
+    // - check if group is optional (group is optional if one of its member is optional)
+    // - add the group widget to the layout accordingly (main inputs or optional inputs)
+    QJsonArray groupArray = descriptor["groups"].toArray();
+    this->groupObjects.reserve(static_cast<size_t>(groupArray.size()));
+    for (int i = 0 ; i<groupArray.size() ; ++i)
+    {
+        // Create the GroupObject
+        this->groupObjects.emplace_back();
+        GroupObject &groupObject = this->groupObjects.back();
+        groupObject.description = groupArray[i].toObject();
+        if ( !(groupObject.description.contains("members") && groupObject.description["members"].isArray()) )
+        {
+            continue;
+        }
+        // Create a QGroupBox and its layout
+        auto groupAndLayout = this->createGroupAndLayout(groupObject.description["name"].toString());
+        groupObject.groupBox = groupAndLayout.first;
+        groupObject.layout = groupAndLayout.second;
+        // Check if the group is optional (group is optional if one of its member is optional)
+        bool groupIsOptional = true;
+        QJsonArray memberArray = groupObject.description["members"].toArray();
+        for (int j = 0 ; j<memberArray.size() ; ++j)
+        {
+            auto it = this->idToInputObject.find(memberArray[j].toString());
+            if(it == this->idToInputObject.end())
+            {
+                continue;
+            }
+            InputObject &inputObject = it->second;
+            inputObject.group = &groupObject;
+            const QJsonValue &isOptional = inputObject.description["optional"];
+            if(isOptional.isNull() || (isOptional.isBool() && !isOptional.toBool()) ) {
+                groupIsOptional = false;
+            }
+        }
+        groupObject.optional = groupIsOptional;
+        // Add the group widget to the layout accordingly (main inputs or optional inputs)
+        destinationLayouts.push_back(pair<QGroupBox*, QVBoxLayout*>(groupAndLayout.first, groupIsOptional ? optionalLayout : mainLayout));
+    }
+}
+
+void InvocationGUIWidget::createMutuallyExclusiveGroup(GroupObject *groupObject, QLayout *parentLayout, const QString &inputName, const QString &inputId, const QJsonValue &inputValue)
+{
+    if(groupObject->comboBox == nullptr)
+    {
+        // If the mutually exclusive group is not yet created: create the combo box
+        QComboBox *comboBox = new QComboBox();
+        groupObject->comboBox = comboBox;
+        parentLayout->addWidget(comboBox);
+        connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [this, groupObject](int itemIndex) { this->mutuallyExclusiveGroupChanged(groupObject, itemIndex); } );
+        if(groupObject->optional)
+        {
+            // If the group is optional: the group box is checkable to unset the parameter in invocationJSON
+            groupObject->groupBox->setCheckable(true);
+            connect(groupObject->groupBox, &QGroupBox::toggled, this, [this, groupObject](bool on)
+            {
+                // Add or remove the value in invocationJSON, and emit invocationChanged with a delay
+                const QString &selectedInputId = groupObject->comboBox->currentData().toString();
+                if(on)
+                {
+                    InputObject &inputObject = this->idToInputObject.at(selectedInputId);
+                    this->invocationJSON->insert(selectedInputId, inputObject.widget != nullptr ? inputObject.getValue() : QJsonValue(true));
+                }
+                else
+                {
+                    this->invocationJSON->remove(selectedInputId);
+                }
+                this->emitInvocationChanged();
+            } );
+        }
+    }
+    groupObject->comboBox->addItem(inputName, QVariant(inputId));
+    // If the invocationJSON (describing the current invocation values) has a value for this parameter: set the combo box to this value
+    if(!inputValue.isNull())
+    {
+        groupObject->comboBox->setCurrentIndex(groupObject->comboBox->count() - 1);
+    }
+}
+
+void InvocationGUIWidget::createInputList(InputObject &inputObject, QWidget *widget, QLayout *layout, const QString &inputId, const QString &inputName, const QString &inputType, const QJsonValue &inputValue)
+{
+    QLineEdit *lineEdit = new QLineEdit();
+    lineEdit->setPlaceholderText(QString("Comma separated ") + (inputType == "String" ? "strings" : inputType == "Number" ? "numbers" : "file paths") + ".");
+    QString listString;
+
+    // Set the lineEdit to the proper input value (from invocationJSON)
+    QJsonDocument valueList;
+    valueList.setArray(inputValue.toArray());
+    lineEdit->setText(QString::fromStdString(valueList.toJson().toStdString()).remove('[').remove(']'));
+
+    // The value of the parameter is the content of the line edit (it should be comma separated values) enclosed in brackets
+    inputObject.getValue = [this, lineEdit]() { return QJsonValue(this->stringToArray(lineEdit->text())); };
+    connect(lineEdit, &QLineEdit::textChanged, [this, inputId](){ this->valueChanged(inputId); });
+    layout->addWidget(lineEdit);
+
+    if(inputType == "File")
+    {
+        // If input is a list of files: a "Select files" push button opens a dialog to select multiple files
+        this->createInputFiles(widget, layout, lineEdit, inputName);
+    }
+}
+
+void InvocationGUIWidget::createInputFiles(QWidget *widget, QLayout *layout, QLineEdit *lineEdit, const QString &inputName)
+{
+    // If input is a list of files: a "Select files" push button opens a dialog to select multiple files
+    QPushButton *pushButton = new QPushButton("Select files");
+    pushButton->setMaximumWidth(100);
+
+    connect(pushButton, &QPushButton::clicked, [this, inputName, lineEdit]()
+    {
+        lineEdit->setText("\"" + this->fileHandler->normalizePaths( QFileDialog::getOpenFileNames(this, "Select " + inputName) ).join("\", \"") + "\"");
+    });
+
+    layout->addWidget(pushButton);
+
+    // Create the button to add the current input data to the list (save the current input data to a temporary file, and add the resulting path)
+    QPushButton *setCurrentInputPushButton = new QPushButton("Add input");
+    connect(setCurrentInputPushButton, &QPushButton::clicked, [this, lineEdit]()
+    {
+        QString text = lineEdit->text();
+        text += text.length() > 0 ? ", " : "";
+        const QString &currentInputFilePath = this->fileHandler->createTemporaryInputFileForCurrentInput();
+        if(!currentInputFilePath.isEmpty())
+        {
+            lineEdit->setText(text + "\"" + currentInputFilePath + "\"");
+        }
+    } );
+
+    // Create the drag and drop callbacks:
+    // On drop: add the current dragged objects to the list
+    //  - if the objects are files: just add the file paths to the list,
+    //  - if the objects are data from the database: save the data to temporary files, and add the resulting paths.
+    layout->addWidget(setCurrentInputPushButton);
+    connect(static_cast<DropWidget*>(widget), &DropWidget::dragEnter, [this](QDragEnterEvent *event) { this->fileHandler->checkAcceptDragEvent(event); });
+    connect(static_cast<DropWidget*>(widget), &DropWidget::drop, [this, lineEdit](QDropEvent *event)
+    {
+        const QMimeData *mimeData = event->mimeData();
+        QStringList paths;
+        // On drop: add the current object to the list
+        if(mimeData->hasUrls())
+        {
+            // if the objects are files: just add the file paths to the list
+            const QList<QUrl> &urls = mimeData->urls();
+            for (int i = 0 ; i < urls.size() ; ++i)
+            {
+                paths.append(urls.at(i).toLocalFile());
+            }
+        }
+        else
+        {
+            // if the objects are data from the database: save the current input data to temporary files, and add the resulting paths.
+            QString filePath = this->fileHandler->createTemporaryInputFileForMimeData(mimeData);
+            if(!filePath.isEmpty())
+            {
+                paths.append(filePath);
+            }
+        }
+
+        // Add the comma separated paths to the list in the line edit
+        QString text = lineEdit->text();
+        for (int i = 0 ; i < paths.size() ; ++i)
+        {
+            text += text.length() > 0 ? ", " : "";
+            text += "\"" + paths[i] + "\"";
+        }
+        lineEdit->setText(text);
+    });
+}
+
+void InvocationGUIWidget::createInputChoices(InputObject &inputObject, QLayout *layout, const QString &inputId, const QString &inputType)
+{
+    // If the parameter has "value-choices": create a combo box to be able to select one of those choices
+    const QJsonArray &choices = inputObject.description["value-choices"].toArray();
+    QComboBox *comboBox = new QComboBox();
+    layout->addWidget(comboBox);
+    bool isInt = inputObject.description["integer"].toBool();
+    connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [this, inputId](){ this->valueChanged(inputId); });
+    inputObject.getValue = [comboBox, inputType, isInt]()
+    {
+        const QString &text = comboBox->currentText();
+        return inputType == "String" ? QJsonValue(text) : isInt ? QJsonValue(text.toInt()) : QJsonValue(text.toDouble());
+    };
+    for(const auto &choice: choices)
+    {
+        const QString &value = inputType == "String" ? choice.toString() : QString::number( isInt ? choice.toInt() : choice.toDouble());
+        comboBox->addItem(value);
+    }
+}
+
+void InvocationGUIWidget::createStringInput(InputObject &inputObject, QLayout *layout, const QString &inputId, const QJsonValue &inputValue, const QString &inputDescription)
+{
+    // If type is String: just create a line edit
+    QLineEdit *lineEdit = new QLineEdit();
+    lineEdit->setPlaceholderText(inputDescription);
+    lineEdit->setText(inputValue.toString());
+
+    inputObject.getValue = [lineEdit]() { return lineEdit->text(); };
+    connect(lineEdit, &QLineEdit::textChanged, [this, inputId](){ this->valueChanged(inputId); });
+    layout->addWidget(lineEdit);
+}
+
+void InvocationGUIWidget::createNumberInput(InputObject &inputObject, QLayout *layout, const QString &inputId, const QJsonValue &inputValue)
+{
+    // If type is Number: create a spin box and set min, max and exclusive min and max
+    // Integer must be handled separately from double (eventhough the code is almost the same) because QDoubleSpinBox != QSpinBox, toInt() != toDouble(), etc.
+    if(inputObject.description["integer"].toBool())
+    {
+        // Set the minimum and maximum, set value and connect to valueChanged signal
+        QSpinBox *spinBox = new QSpinBox();
+        if(inputObject.description["minimum"].isDouble()) {
+            int exclusiveOffset = inputObject.description["exclusive-minimum"].toBool() ? 1 : 0;
+            spinBox->setMinimum(inputObject.description["minimum"].toInt() + exclusiveOffset);
+        }
+        if(inputObject.description["maximum"].isDouble()) {
+            int exclusiveOffset = inputObject.description["exclusive-maximum"].toBool() ? 1 : 0;
+            spinBox->setMaximum(inputObject.description["maximum"].toInt() - exclusiveOffset);
+        }
+        spinBox->setValue(inputValue.toInt());
+        inputObject.getValue = [spinBox](){ return QJsonValue(spinBox->value()); };
+        connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged), [this, inputId](){ this->valueChanged(inputId); });
+        layout->addWidget(spinBox);
+    }
+    else
+    {
+        // Set the minimum and maximum, set value and connect to valueChanged signal
+        QDoubleSpinBox *spinBox = new QDoubleSpinBox();
+        if(inputObject.description["minimum"].isDouble()) {
+            double exclusiveOffset = inputObject.description["exclusive-minimum"].toBool() ? 0.0001 : 0.0;
+            spinBox->setMinimum(inputObject.description["minimum"].toDouble() + exclusiveOffset);
+        }
+        if(inputObject.description["maximum"].isDouble()) {
+            double exclusiveOffset = inputObject.description["exclusive-maximum"].toBool() ? 0.0001 : 0.0;
+            spinBox->setMaximum(inputObject.description["maximum"].toDouble() - exclusiveOffset);
+        }
+        spinBox->setValue(inputValue.toDouble());
+        spinBox->setDecimals(4);
+        inputObject.getValue = [spinBox](){ return QJsonValue(spinBox->value()); };
+        connect(spinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, inputId](){ this->valueChanged(inputId); });
+        layout->addWidget(spinBox);
+    }
+}
+
+void InvocationGUIWidget::createFileInput(InputObject &inputObject, QWidget *widget, QLayout *layout, const QString &inputId, const QString &inputName, const QJsonValue &inputValue, const QString &inputDescription)
+{
+    // If parameter is File: create a line edit (for the file path), a "Select file" button, and a "Set input" button
+    QLineEdit *lineEdit = new QLineEdit();
+    lineEdit->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
+    lineEdit->setPlaceholderText(inputDescription);
+    lineEdit->setText(inputValue.toString());
+
+    inputObject.getValue = [lineEdit]() { return lineEdit->text(); };
+    connect(lineEdit, &QLineEdit::textChanged, [this, inputId](){ this->valueChanged(inputId); });
+    layout->addWidget(lineEdit);
+
+    QPushButton *selectFilePushButton = new QPushButton("Select file");
+    selectFilePushButton->setMaximumWidth(100);
+    connect(selectFilePushButton, &QPushButton::clicked, [this, inputName, lineEdit]()
+    {
+        lineEdit->setText(this->fileHandler->normalizePath(QFileDialog::getOpenFileName(this, "Select " + inputName)));
+    } );
+    layout->addWidget(selectFilePushButton);
+
+    QPushButton *setInputPushButton = new QPushButton("Set input");
+    setInputPushButton->setMaximumWidth(100);
+    connect(setInputPushButton, &QPushButton::clicked, [this, lineEdit]() { lineEdit->setText(this->fileHandler->createTemporaryInputFileForCurrentInput()); } );
+    layout->addWidget(setInputPushButton);
+
+    widget->setAcceptDrops(true);
+
+    // Handle the drop on the widget: just set the line edit to the file path of the dropped object (create a file if necessary)
+    connect(static_cast<DropWidget*>(widget), &DropWidget::dragEnter, [this](QDragEnterEvent *event) { this->fileHandler->checkAcceptDragEvent(event); });
+    connect(static_cast<DropWidget*>(widget), &DropWidget::drop, [this, lineEdit](QDropEvent *event)
+    {
+        const QMimeData *mimeData = event->mimeData();
+        QString filePath;
+
+        if(mimeData->hasUrls())
+        {
+            // If dropping a file on the widget: just set the line edit to the file path
+            filePath = mimeData->urls().first().toLocalFile();
+        }
+        else
+        {
+            // If dropping some data on the widget: create a temporary file from the data and set the line edit to the resulting file path
+            filePath = this->fileHandler->createTemporaryInputFileForMimeData(mimeData);
+        }
+        if(!filePath.isEmpty())
+        {
+            lineEdit->setText(filePath);
+        }
+    });
+}
+
 void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
 {
     // Widget structure:
@@ -304,71 +625,13 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
     this->selectedOutputId.clear();
 
     // Populate idToInputObject from the descriptor inputs
-    QJsonArray inputArray = descriptor["inputs"].toArray();
-    for (int i = 0 ; i<inputArray.size() ; ++i)
-    {
-        const QJsonObject &description = inputArray[i].toObject();
-        const auto &result = this->idToInputObject.emplace(pair<QString, InputObject>(description["id"].toString(), InputObject(description)));
-        // result.first is an iterator: first: id, second: inputObject
-        // result.second tells if emplace was successfull
-        if(!result.second)
-        {
-            // If emplace() replaced the value at the key "description["id"]": warn the user of the error in the descriptor
-            QMessageBox::warning(this, "Error in descriptor file", "Input " + result.first->first + "appears twice in descriptor, only the first one will be considered...");
-        }
-        else
-        {
-            result.first->second.description = description;
-        }
-    }
+    this->populateIdToInputObject(descriptor);
 
     this->outputFiles = descriptor["output-files"].toArray();
     this->groupObjects.clear();
 
-    // Create input groups
-    // For each group:
-    // - create the GroupObject (containing the widget, layout and if it is optional)
-    // - create a QGroupBox and its layout
-    // - check if group is optional (group is optional if one of its member is optional)
-    // - add the group widget to the layout accordingly (main inputs or optional inputs)
     vector<pair<QGroupBox*, QVBoxLayout*>> destinationLayouts;
-    QJsonArray groupArray = descriptor["groups"].toArray();
-    this->groupObjects.reserve(static_cast<size_t>(groupArray.size()));
-    for (int i = 0 ; i<groupArray.size() ; ++i)
-    {
-        // Create the GroupObject
-        this->groupObjects.emplace_back();
-        GroupObject &groupObject = this->groupObjects.back();
-        groupObject.description = groupArray[i].toObject();
-        if ( !(groupObject.description.contains("members") && groupObject.description["members"].isArray()) )
-        {
-            continue;
-        }
-        // Create a QGroupBox and its layout
-        auto groupAndLayout = this->createGroupAndLayout(groupObject.description["name"].toString());
-        groupObject.groupBox = groupAndLayout.first;
-        groupObject.layout = groupAndLayout.second;
-        // Check if the group is optional (group is optional if one of its member is optional)
-        bool groupIsOptional = true;
-        QJsonArray memberArray = groupObject.description["members"].toArray();
-        for (int j = 0 ; j<memberArray.size() ; ++j)
-        {
-            auto it = this->idToInputObject.find(memberArray[j].toString());
-            if(it == this->idToInputObject.end())
-            {
-                continue;
-            }
-            InputObject &inputObject = it->second;
-            inputObject.group = &groupObject;
-            const QJsonValue &isOptional = inputObject.description["optional"];
-            if(isOptional.isNull() || (isOptional.isBool() && !isOptional.toBool()) ) {
-                groupIsOptional = false;
-            }
-        }
-        groupObject.optional = groupIsOptional;
-        // Add the group widget to the layout accordingly (main inputs or optional inputs)
-        destinationLayouts.push_back(pair<QGroupBox*, QVBoxLayout*>(groupAndLayout.first, groupIsOptional ? optionalInputsGroupAndLayout.second : mainInputsGroupAndLayout.second));
-    }
+    this->createInputGroups(descriptor, destinationLayouts, mainInputsGroupAndLayout.second, optionalInputsGroupAndLayout.second);
 
     bool noOptionalInput = true;        // Hide the optional inputs group if there are no optional inputs
 
@@ -411,40 +674,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
         bool inputGroupIsMutuallyExclusive = this->inputGroupIsMutuallyExclusive(inputId);
         if(inputGroupIsMutuallyExclusive)
         {
-            if(groupObject->comboBox == nullptr)
-            {
-                // If the mutually exclusive group is not yet created: create the combo box
-                QComboBox *comboBox = new QComboBox();
-                groupObject->comboBox = comboBox;
-                parentLayout->addWidget(comboBox);
-                connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [this, groupObject](int itemIndex) { this->mutuallyExclusiveGroupChanged(groupObject, itemIndex); } );
-                if(groupObject->optional)
-                {
-                    // If the group is optional: the group box is checkable to unset the parameter in invocationJSON
-                    groupObject->groupBox->setCheckable(true);
-                    connect(groupObject->groupBox, &QGroupBox::toggled, this, [this, groupObject](bool on)
-                    {
-                        // Add or remove the value in invocationJSON, and emit invocationChanged with a delay
-                        const QString &inputId = groupObject->comboBox->currentData().toString();
-                        if(on)
-                        {
-                            InputObject &inputObject = this->idToInputObject.at(inputId);
-                            this->invocationJSON->insert(inputId, inputObject.widget != nullptr ? inputObject.getValue() : QJsonValue(true));
-                        }
-                        else
-                        {
-                            this->invocationJSON->remove(inputId);
-                        }
-                        this->emitInvocationChanged();
-                    } );
-                }
-            }
-            groupObject->comboBox->addItem(inputName, QVariant(inputId));
-            // If the invocationJSON (describing the current invocation values) has a value for this parameter: set the combo box to this value
-            if(!inputValue.isNull())
-            {
-                groupObject->comboBox->setCurrentIndex(groupObject->comboBox->count() - 1);
-            }
+            this->createMutuallyExclusiveGroup(groupObject, parentLayout, inputName, inputId, inputValue);
         }
 
         // If the input parameter is a String, a Number of a File: create a horizontal group which contains the label and the input field (each type will differ slightly)
@@ -458,86 +688,7 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
             // If the parameter is a list: the corresponding widget will be a QLineEdit to enter comma separated values
             if(inputObject.description["list"].toBool())
             {
-                QLineEdit *lineEdit = new QLineEdit();
-                lineEdit->setPlaceholderText(QString("Comma separated ") + (inputType == "String" ? "strings" : inputType == "Number" ? "numbers" : "file paths") + ".");
-                QString listString;
-
-                // Set the lineEdit to the proper input value (from invocationJSON)
-                QJsonDocument valueList;
-                valueList.setArray(inputValue.toArray());
-                lineEdit->setText(QString::fromUtf8(valueList.toJson()).remove('[').remove(']'));
-
-                // The value of the parameter is the content of the line edit (it should be comma separated values) enclosed in brackets
-                inputObject.getValue = [this, lineEdit]() { return QJsonValue(this->stringToArray(lineEdit->text())); };
-                connect(lineEdit, &QLineEdit::textChanged, [this, inputId](){ this->valueChanged(inputId); });
-                layout->addWidget(lineEdit);
-
-                if(inputType == "File")
-                {
-                    // If input is a list of files: a "Select files" push button opens a dialog to select multiple files
-                    QPushButton *pushButton = new QPushButton("Select files");
-                    pushButton->setMaximumWidth(100);
-
-                    connect(pushButton, &QPushButton::clicked, [this, inputName, lineEdit]()
-                    {
-                        lineEdit->setText("\"" + this->fileHandler->normalizePaths( QFileDialog::getOpenFileNames(this, "Select " + inputName) ).join("\", \"") + "\"");
-                    });
-
-                    layout->addWidget(pushButton);
-
-                    // Create the button to add the current input data to the list (save the current input data to a temporary file, and add the resulting path)
-                    QPushButton *setCurrentInputPushButton = new QPushButton("Add input");
-                    connect(setCurrentInputPushButton, &QPushButton::clicked, [this, lineEdit]()
-                    {
-                        QString text = lineEdit->text();
-                        text += text.length() > 0 ? ", " : "";
-                        const QString &currentInputFilePath = this->fileHandler->createTemporaryInputFileForCurrentInput();
-                        if(!currentInputFilePath.isEmpty())
-                        {
-                            lineEdit->setText(text + "\"" + currentInputFilePath + "\"");
-                        }
-                    } );
-
-                    // Create the drag and drop callbacks:
-                    // On drop: add the current dragged objects to the list
-                    //  - if the objects are files: just add the file paths to the list,
-                    //  - if the objects are data from the database: save the data to temporary files, and add the resulting paths.
-                    layout->addWidget(setCurrentInputPushButton);
-                    connect(static_cast<DropWidget*>(widget), &DropWidget::dragEnter, [this](QDragEnterEvent *event) { this->fileHandler->checkAcceptDragEvent(event); });
-                    connect(static_cast<DropWidget*>(widget), &DropWidget::drop, [this, lineEdit](QDropEvent *event)
-                    {
-                        const QMimeData *mimeData = event->mimeData();
-                        QStringList paths;
-                        // On drop: add the current object to the list
-                        if(mimeData->hasUrls())
-                        {
-                            // if the objects are files: just add the file paths to the list
-                            const QList<QUrl> &urls = mimeData->urls();
-                            for (int i = 0 ; i < urls.size() ; ++i)
-                            {
-                                paths.append(urls.at(i).toLocalFile());
-                            }
-                        }
-                        else
-                        {
-                            // if the objects are data from the database: save the current input data to temporary files, and add the resulting paths.
-                            QString filePath = this->fileHandler->createTemporaryInputFileForMimeData(mimeData);
-                            if(!filePath.isEmpty())
-                            {
-                                paths.append(filePath);
-                            }
-                        }
-
-                        // Add the comma separated paths to the list in the line edit
-                        QString text = lineEdit->text();
-                        for (int i = 0 ; i < paths.size() ; ++i)
-                        {
-                            text += text.length() > 0 ? ", " : "";
-                            text += "\"" + paths[i] + "\"";
-                        }
-                        lineEdit->setText(text);
-                    });
-                }
+                this->createInputList(inputObject, widget, layout, inputId, inputName, inputType, inputValue);
             }
             else
             {
@@ -549,122 +700,19 @@ void InvocationGUIWidget::parseDescriptor(QJsonObject *invocationJSON)
                         inputObject.description["value-choices"].toArray().size() > 0)
                 {
                     // If the parameter has "value-choices": create a combo box to be able to select one of those choices
-                    const QJsonArray &choices = inputObject.description["value-choices"].toArray();
-                    QComboBox *comboBox = new QComboBox();
-                    layout->addWidget(comboBox);
-                    bool isInt = inputObject.description["integer"].toBool();
-                    connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [this, inputId](){ this->valueChanged(inputId); });
-                    inputObject.getValue = [comboBox, inputType, isInt]()
-                    {
-                        const QString &text = comboBox->currentText();
-                        return inputType == "String" ? QJsonValue(text) : isInt ? QJsonValue(text.toInt()) : QJsonValue(text.toDouble());
-                    };
-                    for(const auto &choice: choices)
-                    {
-                        const QString &value = inputType == "String" ? choice.toString() : QString::number( isInt ? choice.toInt() : choice.toDouble());
-                        comboBox->addItem(value);
-                    }
+                    this->createInputChoices(inputObject, layout, inputId, inputType);
                 }
                 else if(inputType == "String")
                 {
-                    // If type is String: just create a line edit
-                    QLineEdit *lineEdit = new QLineEdit();
-                    lineEdit->setPlaceholderText(inputDescription);
-                    lineEdit->setText(inputValue.toString());
-
-                    inputObject.getValue = [lineEdit]() { return lineEdit->text(); };
-                    connect(lineEdit, &QLineEdit::textChanged, [this, inputId](){ this->valueChanged(inputId); });
-                    layout->addWidget(lineEdit);
+                    this->createStringInput(inputObject, layout, inputId, inputValue, inputDescription);
                 }
                 else if(inputType == "Number")
                 {
-                    // If type is Number: create a spin box and set min, max and exclusive min and max
-                    // Integer must be handled separately from double (eventhough the code is almost the same) because QDoubleSpinBox != QSpinBox, toInt() != toDouble(), etc.
-                    if(inputObject.description["integer"].toBool())
-                    {
-                        // Set the minimum and maximum, set value and connect to valueChanged signal
-                        QSpinBox *spinBox = new QSpinBox();
-                        if(inputObject.description["minimum"].isDouble()) {
-                            int exclusiveOffset = inputObject.description["exclusive-minimum"].toBool() ? 1 : 0;
-                            spinBox->setMinimum(inputObject.description["minimum"].toInt() + exclusiveOffset);
-                        }
-                        if(inputObject.description["maximum"].isDouble()) {
-                            int exclusiveOffset = inputObject.description["exclusive-maximum"].toBool() ? 1 : 0;
-                            spinBox->setMaximum(inputObject.description["maximum"].toInt() - exclusiveOffset);
-                        }
-                        spinBox->setValue(inputValue.toInt());
-                        inputObject.getValue = [spinBox](){ return QJsonValue(spinBox->value()); };
-                        connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged), [this, inputId](){ this->valueChanged(inputId); });
-                        layout->addWidget(spinBox);
-                    }
-                    else
-                    {
-                        // Set the minimum and maximum, set value and connect to valueChanged signal
-                        QDoubleSpinBox *spinBox = new QDoubleSpinBox();
-                        if(inputObject.description["minimum"].isDouble()) {
-                            double exclusiveOffset = inputObject.description["exclusive-minimum"].toBool() ? 0.0001 : 0.0;
-                            spinBox->setMinimum(inputObject.description["minimum"].toDouble() + exclusiveOffset);
-                        }
-                        if(inputObject.description["maximum"].isDouble()) {
-                            double exclusiveOffset = inputObject.description["exclusive-maximum"].toBool() ? 0.0001 : 0.0;
-                            spinBox->setMaximum(inputObject.description["maximum"].toDouble() - exclusiveOffset);
-                        }
-                        spinBox->setValue(inputValue.toDouble());
-                        spinBox->setDecimals(4);
-                        inputObject.getValue = [spinBox](){ return QJsonValue(spinBox->value()); };
-                        connect(spinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, inputId](){ this->valueChanged(inputId); });
-                        layout->addWidget(spinBox);
-                    }
+                    this->createNumberInput(inputObject, layout, inputId, inputValue);
                 }
                 else if(inputType == "File")
                 {
-                    // If parameter is File: create a line edit (for the file path), a "Select file" button, and a "Set input" button
-                    QLineEdit *lineEdit = new QLineEdit();
-                    lineEdit->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
-                    lineEdit->setPlaceholderText(inputDescription);
-                    lineEdit->setText(inputValue.toString());
-
-                    inputObject.getValue = [lineEdit]() { return lineEdit->text(); };
-                    connect(lineEdit, &QLineEdit::textChanged, [this, inputId](){ this->valueChanged(inputId); });
-                    layout->addWidget(lineEdit);
-
-                    QPushButton *selectFilePushButton = new QPushButton("Select file");
-                    selectFilePushButton->setMaximumWidth(100);
-                    connect(selectFilePushButton, &QPushButton::clicked, [this, inputName, lineEdit]()
-                    {
-                        lineEdit->setText(this->fileHandler->normalizePath(QFileDialog::getOpenFileName(this, "Select " + inputName)));
-                    } );
-                    layout->addWidget(selectFilePushButton);
-
-                    QPushButton *setInputPushButton = new QPushButton("Set input");
-                    setInputPushButton->setMaximumWidth(100);
-                    connect(setInputPushButton, &QPushButton::clicked, [this, lineEdit]() { lineEdit->setText(this->fileHandler->createTemporaryInputFileForCurrentInput()); } );
-                    layout->addWidget(setInputPushButton);
-
-                    widget->setAcceptDrops(true);
-
-                    // Handle the drop on the widget: just set the line edit to the file path of the dropped object (create a file if necessary)
-                    connect(static_cast<DropWidget*>(widget), &DropWidget::dragEnter, [this](QDragEnterEvent *event) { this->fileHandler->checkAcceptDragEvent(event); });
-                    connect(static_cast<DropWidget*>(widget), &DropWidget::drop, [this, lineEdit](QDropEvent *event)
-                    {
-                        const QMimeData *mimeData = event->mimeData();
-                        QString filePath;
-
-                        if(mimeData->hasUrls())
-                        {
-                            // If dropping a file on the widget: just set the line edit to the file path
-                            filePath = mimeData->urls().first().toLocalFile();
-                        }
-                        else
-                        {
-                            // If dropping some data on the widget: create a temporary file from the data and set the line edit to the resulting file path
-                            filePath = this->fileHandler->createTemporaryInputFileForMimeData(mimeData);
-                        }
-                        if(!filePath.isEmpty())
-                        {
-                            lineEdit->setText(filePath);
-                        }
-                    });
+                    this->createFileInput(inputObject, widget, layout, inputId, inputName, inputValue, inputDescription);
                 }
 
                 if(inputType == "String" || inputType == "File")

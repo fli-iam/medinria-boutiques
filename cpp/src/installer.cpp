@@ -52,10 +52,10 @@ bool Installer::isPythonWorking(QWidget *parent, const QString &version)
     QProcess pythonProcess(parent);
     pythonProcess.start(BoutiquesPaths::Python(), {"--version"});
     pythonProcess.waitForFinished();
-    QString output = QString::fromUtf8(pythonProcess.readAllStandardOutput());
-    QString error = QString::fromUtf8(pythonProcess.readAllStandardError());
-    QString pythonVersion = "Python " + version;
-    return output.contains(pythonVersion) || error.contains(pythonVersion);
+    std::string output = pythonProcess.readAllStandardOutput().toStdString();
+    std::string error = pythonProcess.readAllStandardError().toStdString();
+    std::string pythonVersion = "Python " + version.toStdString();
+    return output.find(pythonVersion) != std::string::npos || error.find(pythonVersion) != std::string::npos;
 }
 
 bool Installer::isDockerWorking(QWidget *parent)
@@ -64,52 +64,51 @@ bool Installer::isDockerWorking(QWidget *parent)
     QProcess dockerProcess(parent);
     dockerProcess.start(BoutiquesPaths::Docker(), {"--version"});
     dockerProcess.waitForFinished();
-    QString output = QString::fromUtf8(dockerProcess.readAllStandardOutput());
-    QString error = QString::fromUtf8(dockerProcess.readAllStandardError());
-    QString dockerVersion = "Docker version";
-    return output.contains(dockerVersion) || error.contains(dockerVersion);
+    std::string output = dockerProcess.readAllStandardOutput().toStdString();
+    std::string error = dockerProcess.readAllStandardError().toStdString();
+    std::string dockerVersion = "Docker version";
+    return output.find(dockerVersion) != std::string::npos || error.find(dockerVersion) != std::string::npos;
 }
 
 void Installer::installBoutiques(QWidget *parent, QJsonObject *settings)
 {
     bool pythonAndDockerAreWorking = true;
 
-    if (QSysInfo::productType() == "winrt" || QSysInfo::productType() == "windows") {
+#ifdef Q_OS_WIN
+    // On Windows:
 
-        // On Windows:
+    if(!Installer::isPythonWorking(parent, "3"))
+    {
+        // If "BoutiquesGUI-Data/python/python.exe" does not work:
+        // Install visual studio redistributable (required for python3)
 
-        if(!Installer::isPythonWorking(parent, "3"))
+        QProcess installVisualStudioRedistributableProcess(parent);
+        installVisualStudioRedistributableProcess.start(BoutiquesPaths::VCRedis(), {"\\q"});
+
+        if (!installVisualStudioRedistributableProcess.waitForFinished())
         {
-            // If "BoutiquesGUI-Data/python/python.exe" does not work:
-            // Install visual studio redistributable (required for python3)
-
-            QProcess installVisualStudioRedistributableProcess(parent);
-            installVisualStudioRedistributableProcess.start(BoutiquesPaths::VCRedis(), {"\\q"});
-
-            if (!installVisualStudioRedistributableProcess.waitForFinished())
-            {
-                // If the install fails: ask the user to install it manullay
-                pythonAndDockerAreWorking = false;
-                QMessageBox::critical(parent, "Could not install Microsoft Visual C++ Redistributable for Visual Studio", "Error while installing Microsoft Visual C++ Redistributable for Visual Studio.\nThis software is required to run python3 and boutiques under windows.\n\nTry to install it manually.");
-            }
-            else if(!Installer::isPythonWorking(parent, "3"))
-            {
-                // If the install succeeds but python still does not work: ask the user to install python
-                pythonAndDockerAreWorking = false;
-                QMessageBox::critical(parent, "Python is not working", "Python.exe (" + BoutiquesPaths::Python() + ") is not working.\n\nYou need a working python3 version at this location to run boutiques tools.");
-            }
-        }
-
-    } else {
-        // On Linux:
-
-        if(!Installer::isPythonWorking(parent))
-        {
-            // If python does not work: ask the user to install it
+            // If the install fails: ask the user to install it manullay
             pythonAndDockerAreWorking = false;
-            QMessageBox::critical(parent, "Could not run Python", "Error while testing Python.\nInstall python 2.7 or 3 to run boutiques tools.");
+            QMessageBox::critical(parent, "Could not install Microsoft Visual C++ Redistributable for Visual Studio", "Error while installing Microsoft Visual C++ Redistributable for Visual Studio.\nThis software is required to run python3 and boutiques under windows.\n\nTry to install it manually.");
+        }
+        else if(!Installer::isPythonWorking(parent, "3"))
+        {
+            // If the install succeeds but python still does not work: ask the user to install python
+            pythonAndDockerAreWorking = false;
+            QMessageBox::critical(parent, "Python is not working", "Python.exe (" + BoutiquesPaths::Python() + ") is not working.\n\nYou need a working python3 version at this location to run boutiques tools.");
         }
     }
+#else
+    // On Linux:
+
+    if(!Installer::isPythonWorking(parent))
+    {
+        // If python does not work: ask the user to install it
+        pythonAndDockerAreWorking = false;
+        QMessageBox::critical(parent, "Could not run Python", "Error while testing Python.\nInstall python 2.7 or 3 to run boutiques tools.");
+    }
+
+#endif
 
     if (!Installer::isDockerWorking(parent))
     {
