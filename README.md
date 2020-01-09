@@ -34,6 +34,27 @@ In *QtCreator*, open `cpp/src/CMakeLists.txt` and set the build directory where 
    - Projects > Manage kits > Clone the default kit and modify it to use Clang 8 and CMake
    - The build directories must be at the same level as the `cpp/src/` directory to find the boutiques data in `cpp/BoutiquesGUI-Data/`
 
+#### Create / Install boutiques in BoutiquesGUI-Data
+
+This is how to install the boutiques library along with its dependencies in the `BoutiquesGUI-Data` directory: 
+
+ - From the location of your choice, create a python 3 virtual environment: `python3 -m venv boutiques` (this temporary environment is only used to install boutiques in an isolated environment)
+ - Go to this virtual environment and activate it: `cd boutiques & source bin/activate`
+ - Install boutiques in a target directory: `pip install --target=boutiques boutiques`. This will install boutiques along with all its dependencies in the `boutiques` directory in the `boutiques` virtual env.
+ - Move the `boutiques` directory (of the `boutiques` virtual env, that is `boutiques/boutiques`) in the `BoutiquesGUI-Data` directory.
+ - You can now delete the boutiques virtual environment. 
+ - Create a `bosh.py` file in the `boutiques` directory containing the following code:
+```
+import sys
+
+if __name__ == '__main__':
+
+  from boutiques.bosh import bosh
+  sys.argv[0] = 'bosh'
+  sys.exit(bosh())
+```
+ - When python runs `bosh.py` (for example `python3 path/to/bosh.py`), all libraries which lie beside `bosh.py` (that is all boutiques dependencies) are imported.
+
 ### Directory structure
 
 The required data and executables lie in the `cpp/BoutiquesGUI-Data`:
